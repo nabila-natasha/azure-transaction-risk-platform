@@ -247,3 +247,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Terraform working directories and state
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/crash.log
+**/crash.*.log
