@@ -250,3 +250,8 @@ __marimo__/
 **/terraform.tfstate.*
 **/crash.log
 **/crash.*.log
+
+# Source-derived raw data
+
+# Source-derived raw data
+data/raw/
