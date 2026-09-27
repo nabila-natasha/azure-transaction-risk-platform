@@ -146,3 +146,78 @@ Managed Identity and RBAC have been demonstrated for the ADF workload.
 The ADF System Assigned Managed Identity was inspected through Azure Portal,
 and its access to the Project 4 ADLS Gen2 storage account was configured
 using Azure RBAC.
+
+---
+
+## Day 4 — Managed Identity Integration with ADF
+
+### Objective
+
+Connect Azure Data Factory to the Project 4 ADLS Gen2 storage account using its system-assigned managed identity rather than storage account credentials.
+
+### ADF Linked Service
+
+An Azure Data Lake Storage Gen2 Linked Service was configured in Azure Data Factory:
+
+```text
+ADF: adf-transaction-bello
+Linked Service: LS_ADLS_Transaction
+Authentication: System-assigned managed identity
+Storage: sttransactionbello
+```
+
+The Linked Service provides the connection definition that ADF will use when accessing ADLS Gen2.
+
+### Authentication and Authorization
+
+The security flow is:
+
+```text
+ADF
+ ↓
+System-assigned Managed Identity
+ ↓
+Azure RBAC
+ ↓
+Storage Blob Data Contributor
+ ↓
+sttransactionbello
+```
+
+The managed identity provides authentication without requiring a stored storage account key or application secret.
+
+Azure RBAC determines what the identity is authorized to do.
+
+### ADF Object Model
+
+The Day 4 configuration establishes the relationship between the main ADF objects:
+
+```text
+Linked Service
+    ↓
+Connection to Azure resource
+
+Dataset
+    ↓
+Description of the data/location
+
+Pipeline
+    ↓
+Data movement/transformation workflow
+```
+
+The Linked Service is established before building the ingestion pipeline so that the authentication mechanism is explicit and testable.
+
+### Security Rationale
+
+The configuration avoids embedding storage account credentials in the ADF pipeline.
+
+The system-assigned identity is also lifecycle-bound to the Data Factory resource. If the Data Factory is removed, its system-assigned identity is removed with it.
+
+### Day 4 Result
+
+ADF can authenticate to the Project 4 ADLS Gen2 storage account through its managed identity, while Azure RBAC controls the permitted data-plane operations.
+
+This provides the security foundation required for the Day 5 batch ingestion pipeline.
+
+
