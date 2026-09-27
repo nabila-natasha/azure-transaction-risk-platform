@@ -11,11 +11,6 @@ terraform.tfstate.*
 *.tfvars
 *.tfvars.json
 
-# Credentials
-client_secret*
-credentials*
-secrets*
-
 # Local secrets
 .env
 .env.*
@@ -23,11 +18,13 @@ secrets*
 secrets.local
 *.secret
 
+# Data
+data/*.csv
+
 # Azure local files
 .azure/
 
 # Python
-__pycache__/
 *.py[cod]
 .venv/
 venv/
@@ -177,7 +174,6 @@ activemq-data/
 *.sage.py
 
 # Environments
-.env
 *.env
 .envrc
 .venv
