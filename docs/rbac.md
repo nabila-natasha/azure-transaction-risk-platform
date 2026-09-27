@@ -213,3 +213,118 @@ Azure data resource using Azure RBAC.
 The next step is to codify this authorization model in Terraform so that
 the permission is reproducible rather than remaining a manually configured
 Portal setting.
+
+---
+
+## Day 4 — Terraform-Managed RBAC
+
+### Objective
+
+Convert the Day 3 manually configured RBAC assignment into Terraform-managed infrastructure.
+
+### Existing Day 3 Configuration
+
+The ADF system-assigned managed identity was manually granted:
+
+* **Resource:** `sttransactionbello`
+* **Scope:** Storage account
+* **Role:** `Storage Blob Data Contributor`
+* **Identity:** `adf-transaction-bello`
+
+This proved the RBAC configuration through the Azure Portal before introducing Infrastructure as Code.
+
+### Terraform Configuration
+
+The RBAC assignment is defined in:
+
+```text
+infra/terraform/rbac.tf
+```
+
+Terraform references the ADF system-assigned managed identity through its principal ID and assigns the required data-plane role to the ADLS Gen2 storage account.
+
+The managed identity references are defined in:
+
+```text
+infra/terraform/managed-identities.tf
+```
+
+### Importing Existing Infrastructure
+
+Because the RBAC assignment already existed in Azure from Day 3, Terraform did not automatically recognize it as a managed resource.
+
+The existing Azure role assignment was therefore imported into Terraform state rather than creating a second assignment.
+
+After import:
+
+```text
+terraform plan
+```
+
+returned:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+This confirms that the existing Azure RBAC assignment and Terraform configuration are aligned.
+
+### Why Import Was Required
+
+Terraform does not automatically adopt manually created Azure resources simply because equivalent configuration exists in a `.tf` file.
+
+Terraform management requires:
+
+```text
+Terraform configuration
+        +
+Terraform state
+        ↓
+Managed infrastructure
+```
+
+The import operation connected the existing Azure RBAC resource to Terraform state.
+
+### Day 4 Result
+
+The ADF managed identity's access to the transaction data lake is now represented and managed by Terraform.
+
+This establishes the intended Project 4 progression:
+
+```text
+Day 3
+Portal-first RBAC configuration
+        ↓
+Day 4
+Terraform import + codification
+        ↓
+Future changes
+Terraform plan → review → apply
+```
+
+### Validation
+
+Terraform validation completed successfully:
+
+```text
+terraform validate
+Success! The configuration is valid.
+```
+
+Terraform plan after importing the existing role assignment:
+
+```text
+No changes. Your infrastructure matches the configuration.
+```
+
+### Evidence
+
+Recommended evidence:
+
+```text
+docs/evidence/day03-adf-rbac.PNG
+```
+
+The screenshot shows the Azure Portal RBAC assignment created during Day 3.
+
+
