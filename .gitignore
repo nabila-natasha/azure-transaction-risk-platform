@@ -18,8 +18,8 @@ terraform.tfstate.*
 secrets.local
 *.secret
 
-# Data
-data/*.csv
+# Source-derived raw data
+data/raw/
 
 # Azure local files
 .azure/
@@ -250,8 +250,3 @@ __marimo__/
 **/terraform.tfstate.*
 **/crash.log
 **/crash.*.log
-
-# Source-derived raw data
-
-# Source-derived raw data
-data/raw/
