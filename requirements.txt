@@ -21,3 +21,6 @@ requests==2.34.2
 six==1.17.0
 typing_extensions==4.16.0
 urllib3==2.8.0
+xgboost==3.4.1
+scikit-learn==1.9.1
+shap==0.52.0
