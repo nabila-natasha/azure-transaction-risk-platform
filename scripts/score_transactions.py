@@ -10,6 +10,7 @@ from xgboost import XGBClassifier
 
 STORAGE_ACCOUNT = "sttransactionbello"
 FILESYSTEM = "synapse"
+
 SILVER_ROOT = "silver/transactions"
 GOLD_ROOT = "gold/ml/scored_transactions"
 
@@ -23,18 +24,30 @@ def get_filesystem():
     )
 
     service = DataLakeServiceClient(
-        account_url=f"https://{STORAGE_ACCOUNT}.dfs.core.windows.net",
+        account_url=(
+            f"https://{STORAGE_ACCOUNT}.dfs.core.windows.net"
+        ),
         credential=credential,
     )
 
-    return service.get_file_system_client(FILESYSTEM)
+    return service.get_file_system_client(
+        FILESYSTEM
+    )
 
 
 def read_parquet(filesystem, path):
     client = filesystem.get_file_client(path)
-    data = client.download_file().readall()
 
-    table = pq.read_table(pa.BufferReader(data))
+    data = (
+        client
+        .download_file()
+        .readall()
+    )
+
+    table = pq.read_table(
+        pa.BufferReader(data)
+    )
+
     return table.to_pandas()
 
 
@@ -47,20 +60,32 @@ def load_source(filesystem, source):
             path=prefix,
             recursive=True,
         )
-        if not item["is_directory"]
-        and item["name"].endswith(".parquet")
+        if (
+            not item["is_directory"]
+            and item["name"].endswith(".parquet")
+        )
     ]
 
     paths.sort()
 
     return pd.concat(
-        [read_parquet(filesystem, path) for path in paths],
+        [
+            read_parquet(
+                filesystem,
+                path,
+            )
+            for path in paths
+        ],
         ignore_index=True,
     )
 
 
 def engineer_features(df):
     df = df.copy()
+
+    # --------------------------------------------------------------
+    # Datetime fields
+    # --------------------------------------------------------------
 
     df["event_time"] = pd.to_datetime(
         df["event_time"],
@@ -72,18 +97,53 @@ def engineer_features(df):
         errors="coerce",
     )
 
-    df["transaction_hour"] = df["event_time"].dt.hour
-    df["day_of_week"] = df["event_time"].dt.dayofweek
-    df["month"] = df["event_time"].dt.month
+    # --------------------------------------------------------------
+    # Temporal features
+    # --------------------------------------------------------------
 
-    df["customer_age"] = (
-        (df["event_time"] - df["dob"]).dt.days / 365.25
+    df["transaction_hour"] = (
+        df["event_time"].dt.hour
     )
 
-    lat1 = np.radians(df["lat"])
-    lon1 = np.radians(df["long"])
-    lat2 = np.radians(df["merch_lat"])
-    lon2 = np.radians(df["merch_long"])
+    df["day_of_week"] = (
+        df["event_time"].dt.dayofweek
+    )
+
+    df["month"] = (
+        df["event_time"].dt.month
+    )
+
+    # --------------------------------------------------------------
+    # Customer age
+    # --------------------------------------------------------------
+
+    df["customer_age"] = (
+        (
+            df["event_time"]
+            - df["dob"]
+        ).dt.days
+        / 365.25
+    )
+
+    # --------------------------------------------------------------
+    # Customer-to-merchant geographic distance
+    # --------------------------------------------------------------
+
+    lat1 = np.radians(
+        df["lat"].astype(float)
+    )
+
+    lon1 = np.radians(
+        df["long"].astype(float)
+    )
+
+    lat2 = np.radians(
+        df["merch_lat"].astype(float)
+    )
+
+    lon2 = np.radians(
+        df["merch_long"].astype(float)
+    )
 
     dlat = lat2 - lat1
     dlon = lon2 - lon1
@@ -98,8 +158,14 @@ def engineer_features(df):
     df["distance_km"] = (
         6371
         * 2
-        * np.arcsin(np.sqrt(a))
+        * np.arcsin(
+            np.sqrt(a)
+        )
     )
+
+    # --------------------------------------------------------------
+    # Exact model feature contract
+    # --------------------------------------------------------------
 
     features = [
         "amt",
@@ -119,13 +185,16 @@ def engineer_features(df):
 
 
 def train_model(train, features):
+
     X_train = train[features]
     y_train = train["is_fraud"]
 
     fraud = y_train.sum()
     non_fraud = len(y_train) - fraud
 
-    scale_pos_weight = non_fraud / fraud
+    scale_pos_weight = (
+        non_fraud / fraud
+    )
 
     model = XGBClassifier(
         n_estimators=300,
@@ -149,13 +218,22 @@ def train_model(train, features):
 
 
 def main():
+
     filesystem = get_filesystem()
 
     print("Loading batch training data...")
-    train = load_source(filesystem, "batch")
+
+    train = load_source(
+        filesystem,
+        "batch",
+    )
 
     print("Loading streaming evaluation data...")
-    evaluation = load_source(filesystem, "streaming")
+
+    evaluation = load_source(
+        filesystem,
+        "streaming",
+    )
 
     print(
         f"Training rows:   {len(train):,}"
@@ -165,27 +243,58 @@ def main():
         f"Scoring rows:     {len(evaluation):,}"
     )
 
-    print("\nEngineering training features...")
-    train, features = engineer_features(train)
+    # --------------------------------------------------------------
+    # Feature engineering
+    # --------------------------------------------------------------
 
-    print("Engineering evaluation features...")
-    evaluation, _ = engineer_features(evaluation)
+    print(
+        "\nEngineering training features..."
+    )
 
-    print("Training XGBoost model...")
+    train, features = engineer_features(
+        train
+    )
+
+    print(
+        "Engineering evaluation features..."
+    )
+
+    evaluation, _ = engineer_features(
+        evaluation
+    )
+
+    # --------------------------------------------------------------
+    # Train
+    # --------------------------------------------------------------
+
+    print(
+        "Training XGBoost model..."
+    )
+
     model = train_model(
         train,
         features,
     )
 
-    print("Training complete.")
+    print(
+        "Training complete."
+    )
 
-    print("\nScoring evaluation transactions...")
+    # --------------------------------------------------------------
+    # Score
+    # --------------------------------------------------------------
+
+    print(
+        "\nScoring evaluation transactions..."
+    )
 
     probabilities = model.predict_proba(
         evaluation[features]
     )[:, 1]
 
-    evaluation["fraud_probability"] = probabilities
+    evaluation["fraud_probability"] = (
+        probabilities
+    )
 
     evaluation["predicted_fraud"] = (
         probabilities >= MODEL_THRESHOLD
@@ -214,28 +323,58 @@ def main():
         MODEL_VERSION
     )
 
+    # --------------------------------------------------------------
+    # Gold serving contract
+    # --------------------------------------------------------------
+
     output_columns = [
+
+        # Transaction identity / timing
         "trans_num",
         "event_id",
         "event_time",
         "ingestion_time",
+
+        # Customer / transaction context
         "merchant",
         "category",
         "amt",
+        "first",
+        "last",
+        "gender",
+        "street",
         "city",
         "state",
         "zip",
+        "dob",
+
+        # Original geographic features
         "lat",
         "long",
         "city_pop",
         "merch_lat",
         "merch_long",
+
+        # Engineered model features
+        "transaction_hour",
+        "day_of_week",
+        "month",
+        "customer_age",
+        "distance_km",
+
+        # Ground truth
         "is_fraud",
+
+        # Model outputs
         "fraud_probability",
         "predicted_fraud",
         "risk_band",
+
+        # Model metadata
         "model_threshold",
         "model_version",
+
+        # Source metadata
         "source",
     ]
 
@@ -243,11 +382,17 @@ def main():
         output_columns
     ].copy()
 
+    # --------------------------------------------------------------
+    # Write directly to ADLS Gold
+    # --------------------------------------------------------------
+
     output_path = (
         f"{GOLD_ROOT}/scored_transactions.parquet"
     )
 
-    print("\nWriting scored transactions...")
+    print(
+        "\nWriting scored transactions..."
+    )
 
     table = pa.Table.from_pandas(
         output,
@@ -277,7 +422,22 @@ def main():
         f"\nOutput rows: {len(output):,}"
     )
 
-    print("\nRisk bands:")
+    # --------------------------------------------------------------
+    # Verification
+    # --------------------------------------------------------------
+
+    print(
+        "\nOutput columns:"
+    )
+
+    for column in output.columns:
+        print(
+            f"  - {column}"
+        )
+
+    print(
+        "\nRisk bands:"
+    )
 
     print(
         output["risk_band"]
@@ -286,7 +446,9 @@ def main():
         .to_string()
     )
 
-    print("\nPredicted fraud:")
+    print(
+        "\nPredicted fraud:"
+    )
 
     print(
         output["predicted_fraud"]
@@ -295,20 +457,46 @@ def main():
         .to_string()
     )
 
-    print("\nSample:")
+    print(
+        "\nRequired engineered features:"
+    )
+
+    required_features = [
+        "dob",
+        "transaction_hour",
+        "day_of_week",
+        "month",
+        "customer_age",
+        "distance_km",
+    ]
+
+    for column in required_features:
+        print(
+            f"  - {column}: "
+            f"{'OK' if column in output.columns else 'MISSING'}"
+        )
+
+    print(
+        "\nSample:"
+    )
 
     print(
         output[
             [
                 "trans_num",
                 "amt",
+                "transaction_hour",
+                "customer_age",
+                "distance_km",
                 "fraud_probability",
                 "predicted_fraud",
                 "risk_band",
             ]
         ]
         .head(10)
-        .to_string(index=False)
+        .to_string(
+            index=False
+        )
     )
 
 
