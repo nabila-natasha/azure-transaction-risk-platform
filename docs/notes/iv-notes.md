@@ -4440,156 +4440,984 @@ That is the key Day 8 story.
 
 ---
 
-# 164. Strong Answer: "Why Three Dashboards?"
+# 164. Strong Answer: "Why Did You Combine the Dashboards?"
 
-> "Because the users ask different questions. Executives need aggregate risk and volume trends, investigators need transaction-level details, and ML or risk analysts need model performance, threshold analysis and explainability. I designed the serving outputs around those different analytical needs rather than exposing one undifferentiated dataset."
+> "I initially separated the executive, investigation and ML views conceptually, but after building the Power BI layer I consolidated them into two pages. The first page, Fraud Risk Overview, combines business-level transaction indicators with model diagnostics and pipeline health. The second page, Transaction Investigation, focuses on transaction-level investigation. This keeps the dashboard purposeful without creating a separate page that is too sparse."
+
+The final Power BI structure is:
+
+```text
+Page 1
+Fraud Risk Overview
+    ├── Transaction KPIs
+    ├── Anomaly-model indicators
+    ├── Transaction trend
+    ├── Geographic risk
+    ├── Pipeline / DQ health
+    ├── XGBoost threshold analysis
+    └── Global SHAP importance
+
+Page 2
+Transaction Investigation
+    ├── State filter
+    ├── Category filter
+    ├── Risk filter
+    ├── Predicted Fraud filter
+    └── Transaction-level investigation table
+```
+
+This is the actual implemented Power BI design.
 
 ---
 
 # 165. Strong Answer: "What Is the Most Important Day 8 Data-Modeling Decision?"
 
-> "I would say defining the grain of each serving dataset. The transaction investigation view is transaction-level, while executive and ML outputs are aggregated or metric-oriented. If the grains are not clear, joins can duplicate rows and produce incorrect business metrics."
+> "I would say defining the grain of each serving dataset. The transaction investigation view is transaction-level, while the executive overview is aggregated by transaction date and state, and the ML outputs have their own metric or feature grains. If these datasets were joined without understanding their grains, I could duplicate rows and produce incorrect transaction counts or monetary totals."
+
+The serving layer therefore treats each analytical output according to its intended grain.
 
 ---
 
-# 166. Strong Answer: "What Does the Executive Dashboard Actually Tell You?"
+# 166. Strong Answer: "What Does the Fraud Risk Overview Show?"
 
-> "It summarizes transaction activity and model-identified risk: transaction volume, fraud rate, flagged transaction count or value, risk-band distribution, geography and trends. I would be careful to distinguish flagged transaction value from confirmed fraud loss because the model prediction is not ground truth."
+> "The Fraud Risk Overview combines three perspectives: business transaction activity, model behaviour and pipeline health. At the top I show transaction count, flagged transaction count, flagged transaction value and average fraud probability, along with Isolation Forest anomaly indicators. The lower sections show transaction volume over time, flagged transactions by state, pipeline and data-quality health, XGBoost threshold behaviour and global SHAP feature importance."
+
+The dashboard currently contains:  
+
+### Transaction KPIs
+- Transaction Count
+- Flagged Transactions
+- Flagged Transactions Value
+- Average Fraud Probability
+  
+### Anomaly-model indicators
+- Anomaly Rate
+- Normal Group Fraud Rate
+- Anomaly Group Fraud Rate
+- Isolation Forest PR-AUC
+  
+### Operational / analytical visuals
+- Transaction Volume Over Time
+- Flagged Transactions by State
+- Pipeline & Data Quality
+- XGBoost Threshold: Precision vs Recall
+- Global SHAP Feature Importance
+
+The dashboard therefore connects:
+
+```text
+Business activity
+       +
+Model outputs
+       +
+Data quality
+```
+
+rather than treating Power BI as only a visualization layer.
 
 ---
 
-# 167. Strong Answer: "Can You Explain Why a Transaction Was Flagged?"
+# 167. Strong Answer: "What Does the Transaction Investigation Dashboard Show?"
 
-> "The current Gold SHAP output provides global feature importance, so I can explain which features are generally most influential to the model. I should not claim that the current dashboard provides row-level SHAP explanations for every transaction unless I separately generate those local SHAP contributions."
+> "The Transaction Investigation page is designed for drill-down rather than executive summary. It provides filters for state, category, risk and predicted fraud, followed by a transaction-level table containing the transaction identifier, event time, merchant, category, amount, location and engineered risk features such as transaction hour, customer age and distance."
 
-This is an especially important accuracy point.
+The investigation workflow is:
 
----
+```text
+Apply filters
+     ↓
+Narrow the transaction population
+     ↓
+Review transaction context
+     ↓
+Inspect fraud probability
+     ↓
+Review risk classification
+     ↓
+Perform human investigation
+```
 
-# 168. Strong Answer: "What Is the Difference Between the ML and Executive Dashboards?"
+The model output is an investigation signal.
 
-> "The executive view answers what is happening at an aggregate business level. The ML view answers how the model is behaving and why certain features matter. One is primarily business monitoring; the other is model and analytical diagnostics."
-
----
-
-# 169. Strong Answer: "How Do You Know the Dashboard Data Is Trustworthy?"
-
-> "I trace it back through the same pipeline: the source data is ingested into Bronze, validated and deduplicated into Silver, and then transformed into Gold analytical outputs. I also expose data-quality metrics such as row counts, duplicate rates and quarantine counts so the consumer has visibility into pipeline health."
-
----
-
-# 170. Strong Answer: "What If the Business Wants Real-Time Dashboarding?"
-
-> "The current project demonstrates historical streaming replay rather than true production real-time scoring. For a real-time requirement, I would need to design the latency target, streaming aggregation strategy, scoring architecture, serving store and Power BI refresh or streaming-consumption pattern around that SLA."
-
-This distinction prevents overclaiming.
+It is not presented as an automatic final fraud decision.
 
 ---
 
-# 171. Strong Answer: "What Would You Improve in Day 8?"
+# 168. Strong Answer: "Why Are There Two Power BI Pages Rather Than One?"
 
-> "I would strengthen the serving layer with governed semantic models, clearer metric definitions, row-level security where required, monitoring and performance optimization. On the ML side, I would also consider generating row-level SHAP outputs if investigators need transaction-specific explanations."
+> "The two pages serve different analytical workflows. Fraud Risk Overview is designed for monitoring overall transaction activity, model behaviour and pipeline health. Transaction Investigation is designed for drilling into individual transactions. Keeping those workflows separate makes the dashboard easier to use while avoiding unnecessary pages."
+
+The distinction is:
+
+```text
+Fraud Risk Overview
+        ↓
+"What is happening?"
+
+Transaction Investigation
+        ↓
+"Which transactions should I investigate?"
+```
 
 ---
 
-# 172. Day 8 Interview Questions — Synapse and Serving
+# 169. Strong Answer: "Why Did You Put ML Metrics on the Fraud Risk Overview?"
+
+> "The model is part of the risk-monitoring story, so I wanted the overview to show not only the business-level transaction indicators but also how the model behaves. The XGBoost threshold chart shows the precision-recall trade-off, while SHAP provides global feature importance. Isolation Forest metrics provide a complementary anomaly-detection perspective."
+
+This avoids treating ML as an isolated technical component.
+
+---
+
+# 170. Strong Answer: "What Is Fraud Probability?"
+
+> "Fraud probability is the model's numeric prediction score between zero and one. In Power BI I format it as a percentage for readability. For example, a stored value of 0.9732 is displayed as 97.32%."
+
+The underlying value remains numeric:  
+`0.9732`
+
+The dashboard displays:
+`97.32%`
+
+This is a presentation-formatting decision, not a change to the model output.
+
+---
+
+# 171. Strong Answer: "What Is the Difference Between Fraud Probability and Predicted Fraud?"
+
+Fraud probability is continuous:
+
+```text
+0.01
+0.25
+0.63
+0.97
+```
+
+Predicted fraud is a binary classification generated using a threshold.
+
+For example:
+
+```text
+fraud_probability >= threshold
+        ↓
+predicted_fraud = 1
+```
+
+while:
+
+```text
+fraud_probability < threshold
+        ↓
+predicted_fraud = 0
+```
+
+In the current scoring output, the model threshold is stored as:
+
+`0.5`
+
+Therefore, the dashboard should distinguish:
+
+```text
+Fraud Probability
+        =
+continuous model score
+
+Predicted Fraud
+        =
+threshold-based classification
+```
+
+This distinction is important when explaining the model to non-technical stakeholders.
+
+---
+
+# 172. Strong Answer: "Why Display Fraud Probability as a Percentage?"
+
+> "The model stores probability as a value between zero and one because that is the natural numeric representation. For business users, a percentage is easier to interpret, so Power BI formats the value as a percentage without changing the underlying data."
+
+Example:
+
+```text
+0.00916 → 0.916%
+0.07990 → 7.990%
+0.97320 → 97.320%
+```
+
+---
+
+# 173. Strong Answer: "Why Display Transaction Amount as USD?"
+
+> "The transaction amount is a numeric monetary field, so I formatted it as USD in Power BI for business readability. The underlying field remains numeric so it can still be aggregated."
+
+For example:
+
+`1061.81`
+
+is displayed as:
+
+`$1,061.81`
+
+The same convention is applied to:
+
+* transaction value
+* flagged transaction value
+* transaction-level amount
+
+---
+
+# 174. Strong Answer: "What Is Flagged Transaction Value?"
+
+> "Flagged transaction value is the sum of transaction amounts for transactions classified as flagged by the model. I deliberately call it flagged transaction value rather than fraud loss because the model prediction does not establish that the transaction resulted in a confirmed financial loss."
+
+This distinction is important:
+
+```text
+Model flags transaction
+        ↓
+Transaction amount
+        ↓
+Flagged Transaction Value
+```
+
+It does **not** automatically mean:
+
+```text
+Flagged Transaction Value
+=
+Confirmed Fraud Loss
+```
+
+---
+
+# 175. Strong Answer: "Why Does the Dashboard Show Both Model Metrics and Pipeline Metrics?"
+
+> "A model metric alone doesn't tell me whether the underlying data pipeline is healthy. I therefore expose both model behaviour and upstream data-quality indicators. This gives users visibility into whether the analytical output is being produced from a healthy or degraded data pipeline."
+
+The current dashboard shows:
+
+```text
+Model
+ ├── XGBoost precision
+ ├── XGBoost recall
+ ├── SHAP importance
+ └── Isolation Forest metrics
+
+Pipeline
+ ├── Rows received
+ ├── Rows valid
+ ├── Rows quarantined
+ └── DQ pass rate
+```
+
+This creates a connection between:
+
+```text
+Data quality
+      ↓
+Analytical data
+      ↓
+Model output
+      ↓
+Business reporting
+```
+
+---
+
+# 176. Strong Answer: "What Does the Pipeline/DQ Section Tell You?"
+
+The current run reports:
+
+```text
+Rows Received       244,276
+Rows Valid          139,538
+Rows Quarantined    104,738
+Duplicate Rate       42.88%
+DQ Pass Rate         57.12%
+```
+
+> "The DQ section makes the pipeline condition visible to dashboard users. A significant number of rows were quarantined as duplicates or problematic records, so I don't hide that result. It demonstrates that the pipeline detected and isolated data-quality issues rather than silently passing them downstream."
+
+This is a useful engineering story because:
+
+```text
+Bad / duplicate data
+        ↓
+Detected
+        ↓
+Quarantined
+        ↓
+Not silently propagated
+```
+
+---
+
+# 177. Strong Answer: "How Do You Explain the XGBoost Precision-Recall Chart?"
+
+The dashboard plots:
+
+```text
+Threshold    Precision    Recall
+0.3           3.74%       89.92%
+0.5           6.06%       84.50%
+0.7           9.73%       77.13%
+```
+
+The interpretation is:
+
+```text
+Lower threshold
+    ↓
+More positive classifications
+    ↓
+Higher recall
+    ↓
+More false positives
+
+Higher threshold
+    ↓
+Fewer positive classifications
+    ↓
+Higher precision
+    ↓
+Lower recall
+```
+
+A strong interview answer is:
+
+> "I exposed threshold analysis because the classification threshold is an operational decision, not simply a technical constant. Lowering the threshold can increase recall but also increase the investigation workload, while increasing it can improve precision but miss more positive cases. The appropriate threshold depends on the business cost of false positives, false negatives and available investigation capacity."
+
+Do not describe `0.3`, `0.5`, or `0.7` as universally optimal.
+
+---
+
+# 178. Strong Answer: "Why Is PR-AUC Important for This Fraud Problem?"
+
+> "Fraud is an imbalanced classification problem, so PR-AUC is particularly useful because it focuses on the relationship between precision and recall for the positive class. ROC-AUC is still useful, but PR-AUC provides additional insight into how well the model identifies the minority fraud class."
+
+Current XGBoost evaluation:
+
+```text
+ROC-AUC = 0.9826
+PR-AUC  = 0.3622
+```
+
+The two metrics answer different questions and should not be interpreted as interchangeable.
+
+---
+
+# 179. Strong Answer: "What Does the SHAP Chart Tell You?"
+
+The current Power BI chart is:
+
+**Global SHAP Feature Importance**
+
+The leading features are:
+
+```text
+1. Amount
+2. Transaction Hour
+3. Month
+4. Customer Age
+5. City Population
+6. Day of Week
+```
+
+A strong answer is:
+
+> "The SHAP output gives me global feature importance based on mean absolute SHAP values. In this run, amount has the largest average absolute contribution, followed by transaction hour and month. This helps me understand which features are most influential to the model across the evaluation population."
+
+Important limitation:
+
+> "This is global feature importance. It does not tell me the direction of the effect for a specific transaction and it does not provide row-level explanations."
+
+---
+
+# 180. Strong Answer: "Can You Explain Why a Specific Transaction Was Flagged?"
+
+> "I can inspect its fraud probability, predicted class, risk band and the transaction features stored in the scoring output. However, the current SHAP artifact is global rather than local, so I should not claim that the dashboard can explain the exact contribution of every feature for that individual transaction. If local explanations were required, I would generate and serve row-level SHAP contributions."
+
+This is an important accuracy boundary.
+
+---
+
+# 181. Strong Answer: "What Does Isolation Forest Add?"
+
+> "Isolation Forest provides an unsupervised anomaly signal that is complementary to the supervised XGBoost fraud classifier. Instead of learning directly from the fraud label, it identifies observations that appear unusual in feature space."
+
+Current results:
+
+```text
+ROC-AUC                    0.8198
+PR-AUC                     0.0125
+Anomaly Rate              11.74%
+Normal Group Fraud Rate    0.082%
+Anomaly Group Fraud Rate   0.9584%
+```
+
+The anomaly group has a higher observed fraud rate than the normal group in this evaluation.
+
+The model is therefore treated as a complementary risk signal rather than a replacement for XGBoost.
+
+---
+
+# 182. Strong Answer: "How Do You Know the Power BI Dashboard Is Connected to the Correct Data?"
+
+> "The Power BI visuals consume Synapse Serverless serving views, and those views query the Gold and audit Parquet outputs in ADLS. I validated the serving views independently in Synapse before connecting Power BI. The Power BI KPI values can then be reconciled against those SQL results."
+
+Examples of reconciliation include:
+
+```text
+Transaction Count
+139,538
+
+Rows Valid
+139,538
+
+Rows Received
+244,276
+
+Rows Quarantined
+104,738
+```
+
+This creates a traceable path:
+
+```text
+ADLS Parquet
+    ↓
+Synapse OPENROWSET
+    ↓
+Serving View
+    ↓
+Power BI
+```
+
+rather than treating the dashboard as an independent data source.
+
+---
+
+# 183. Strong Answer: "Why Did You Use Serving Views Instead of Putting the SQL Logic in Power BI?"
+
+> "I wanted the analytical logic to remain close to the data-serving layer rather than duplicating business logic inside individual Power BI reports. Synapse views provide a reusable SQL interface that can be validated independently and consumed by BI tools."
+
+This also reduces coupling between:
+
+```text
+Physical storage
+        ↓
+Business reporting
+```
+
+The Power BI layer does not need to know the full physical ADLS path structure.
+
+---
+
+# 184. Strong Answer: "Why Didn't You Create Relationships Between All Six Serving Views?"
+
+> "Because they represent different analytical grains and don't share a clean dimensional key. Forcing relationships between them could create many-to-many behaviour or duplicate rows and therefore incorrect measures."
+
+Examples:
+
+```text
+Transaction Investigation
+    → one row per transaction
+
+Executive Overview
+    → date + state
+
+XGBoost Metrics
+    → metric / threshold
+
+SHAP
+    → feature
+
+Isolation Forest
+    → model metrics
+
+Pipeline Health
+    → pipeline run
+```
+
+Therefore, I kept the analytical subjects separate instead of inventing relationships that don't represent real business relationships.
+
+---
+
+# 185. Strong Answer: "What Would You Do If the Business Wanted a Fully Integrated Semantic Model?"
+
+> "I would introduce conformed dimensions where there is a legitimate shared business key, such as a proper date dimension or other governed dimensions. I would not solve the requirement by blindly joining datasets that have incompatible grains."
+
+A possible production semantic model could contain:
+
+```text
+DIM_DATE
+DIM_STATE
+DIM_CATEGORY
+        ↓
+FACT_TRANSACTION
+```
+
+while model-evaluation and pipeline-monitoring outputs could remain separate analytical tables or dedicated semantic-model subjects.
+
+---
+
+# 186. Strong Answer: "How Would You Investigate a Wrong Number in Power BI?"
+
+I would trace the metric backwards:
+
+```text
+Power BI visual
+      ↓
+Power BI measure
+      ↓
+Serving view
+      ↓
+Synapse SQL
+      ↓
+ADLS Parquet
+      ↓
+Gold transformation
+      ↓
+Silver data
+      ↓
+DQ / ingestion
+```
+
+I would first determine whether the problem is:
+
+* visual configuration
+* DAX measure
+* filter context
+* serving SQL
+* source data
+* transformation logic
+* duplicate records
+* data-quality issue
+
+This prevents changing the dashboard when the actual problem is upstream.
+
+---
+
+# 187. Strong Answer: "How Would You Investigate a Dashboard Showing Zero Transactions?"
+
+I would check in this order:
+
+```text
+1. Is Power BI connected?
+2. Does the serving view return rows?
+3. Does the underlying Parquet file exist?
+4. Does Synapse Serverless have storage access?
+5. Is a slicer/filter excluding all rows?
+6. Is the DAX measure correct?
+7. Has the underlying Gold output changed?
+```
+
+This separates:
+
+```text
+Infrastructure problem
+vs.
+Data problem
+vs.
+SQL problem
+vs.
+BI problem
+```
+
+---
+
+# 188. Strong Answer: "How Would You Improve Power BI Performance?"
+
+I would first identify the bottleneck.
+
+Potential issues include:
+
+```text
+Large transaction table
+        ↓
+Large scans
+
+Too many visuals
+        ↓
+Multiple queries
+
+Complex DAX
+        ↓
+Expensive calculations
+
+Poor serving SQL
+        ↓
+Repeated computation
+
+Unnecessary columns
+        ↓
+Larger model
+```
+
+Potential improvements include:
+
+* narrower serving views
+* pre-aggregation
+* appropriate filtering
+* reducing unnecessary columns
+* query optimization
+* import or caching strategies where appropriate
+* incremental refresh where appropriate
+* governed semantic models
+* dedicated compute if workload justifies it
+
+I would measure the bottleneck before changing the architecture.
+
+---
+
+# 189. Strong Answer: "What Would You Productionize in the Power BI Layer?"
+
+Potential improvements include:
+
+* Power BI Service deployment
+* governed semantic models
+* workspace/environment separation
+* row-level security
+* controlled refresh
+* certified datasets
+* lineage
+* access auditing
+* monitoring
+* incremental refresh
+* formal metric definitions
+* alerting
+
+These are future production considerations and should not be presented as already implemented.
+
+---
+
+# 190. Strong Answer: "What Would You Productionize in the ML Serving Layer?"
+
+The current project retrains XGBoost during the scoring workflow.
+
+For production, I would consider:
+
+```text
+Training
+   ↓
+Model artifact
+   ↓
+Model versioning
+   ↓
+Validation / approval
+   ↓
+Deployment
+   ↓
+Scoring
+```
+
+rather than retraining as part of every scoring run.
+
+I would also consider:
+
+* model registry
+* model version management
+* feature consistency
+* prediction monitoring
+* drift monitoring
+* threshold governance
+* model performance monitoring
+* rollback procedures
+
+The current project stores:
+
+```text
+model_version
+model_threshold
+fraud_probability
+predicted_fraud
+risk_band
+```
+
+with the scored transactions, which provides useful lineage for downstream analysis.
+
+---
+
+# 191. Strong Answer: "What Would You Add If Investigators Needed More Explainability?"
+
+> "I would generate row-level SHAP contributions for scored transactions and expose those through a dedicated serving dataset. That would allow an investigator to select a transaction and see which features contributed most strongly to that specific prediction."
+
+Current implementation:
+
+```text
+Global SHAP
+    ↓
+Which features matter generally?
+```
+
+Possible future implementation:
+
+```text
+Local SHAP
+    ↓
+Which features contributed to this particular transaction?
+```
+
+This distinction is important.
+
+---
+
+# 192. Strong Answer: "What Does the Dashboard Demonstrate About Your Data Engineering Skills?"
+
+> "The dashboard demonstrates the final consumption layer of the platform rather than being a standalone visualization exercise. The data has gone through ingestion, validation, transformation and ML processing before being exposed through Synapse serving views and consumed by Power BI."
+
+The complete path is:
+
+```text
+Source
+  ↓
+Ingestion
+  ↓
+Bronze
+  ↓
+Silver
+  ↓
+Data Quality
+  ↓
+Gold
+  ↓
+ML
+  ↓
+Synapse Serving
+  ↓
+Power BI
+```
+
+This demonstrates:
+
+```text
+Data Engineering
++
+SQL
++
+Data Modeling
++
+ML Consumption
++
+BI
++
+Cloud Architecture
+```
+
+---
+
+# 193. Strong Answer: "What Is the Difference Between a Dashboard and a Serving Layer?"
+
+> "The serving layer provides structured, governed analytical access to the data. The dashboard is one consumer of that data. I therefore don't treat Power BI as the place where the entire data architecture lives."
+
+Conceptually:
+
+```text
+ADLS
+  ↓
+Synapse Serving Layer
+  ↓
+Power BI
+```
+
+The same serving layer could potentially support other downstream consumers.
+
+---
+
+# 194. Strong Answer: "What Is the Business Value of the Investigation Dashboard?"
+
+> "It reduces the amount of raw transaction data an analyst has to inspect manually. Filters allow the analyst to narrow the population by state, category, risk and predicted fraud, while the detailed table provides the transaction context and model indicators needed for further investigation."
+
+I would not claim that it automatically resolves fraud cases.
+
+The intended process remains:
+
+```text
+Model
+ ↓
+Risk signal
+ ↓
+Analyst investigation
+ ↓
+Business decision
+```
+
+---
+
+# 195. Strong Answer: "What Is the Difference Between Model Output and Ground Truth?"
+
+Model output includes:
+
+```text
+fraud_probability
+predicted_fraud
+risk_band
+```
+
+Ground truth is represented by:
+
+```text
+is_fraud
+```
+
+where available in the evaluation dataset.
+
+Therefore:
+
+```text
+predicted_fraud
+        ≠
+confirmed fraud
+```
+
+The model can make:
+
+```text
+True Positive
+False Positive
+False Negative
+True Negative
+```
+
+This is why model evaluation metrics such as precision, recall and PR-AUC are required.
+
+---
+
+# 196. Strong Answer: "Why Does the Dashboard Show Actual Fraud Count?"
+
+> "The executive serving view includes actual fraud count because the evaluation dataset contains the ground-truth fraud label. This allows model predictions to be compared with observed labels during evaluation. I would distinguish this from confirmed financial loss in a live operational environment."
+
+The distinction is:
+
+```text
+is_fraud
+    ↓
+ground-truth label in the evaluation data
+
+predicted_fraud
+    ↓
+model classification
+```
+
+---
+
+# 197. Strong Answer: "What Would You Do If Ground Truth Were Not Available in Production?"
+
+> "I would separate immediate model monitoring from delayed outcome evaluation. Without immediate ground truth, I could monitor prediction distributions, score distributions, alert volumes, drift and operational outcomes. Once confirmed fraud outcomes become available, I could calculate precision, recall and other supervised performance metrics retrospectively."
+
+This is an important distinction between:
+
+```text
+Model monitoring
+vs.
+Model performance evaluation
+```
+
+---
+
+# 198. Day 8 — Power BI Interview Questions
 
 Be ready for:
 
-* Why Synapse Serverless?
-* Why not Dedicated SQL?
-* Why not query ADLS directly from Power BI?
-* What is a serving layer?
-* What is a serving view?
-* Why create multiple views?
-* What is the grain of each view?
-* Why does grain matter?
-* How does Synapse Serverless interact with ADLS?
-* Why Parquet?
-* How would you optimize slow queries?
-* How would you handle growing data volume?
-* How would you secure the serving layer?
-* How would you handle schema changes?
-
----
-
-# 173. Day 8 Interview Questions — Power BI
-
-Be ready for:
-
-* What does the executive dashboard show?
-* What does the investigation dashboard show?
-* What does the ML dashboard show?
-* Why separate the dashboards?
-* What metrics are most important to executives?
-* How would an investigator use the transaction view?
-* How would you explain threshold analysis?
-* How would you explain SHAP to a business user?
-* What is the difference between flagged value and fraud loss?
-* How would you handle Power BI performance?
+* Why did you use Power BI?
+* Why did you use Synapse as the serving layer?
+* Why not connect Power BI directly to ADLS?
+* What does the Fraud Risk Overview show?
+* What does the Transaction Investigation page show?
+* Why did you combine the original three conceptual pages into two?
+* What is fraud probability?
+* Why display fraud probability as a percentage?
+* Why display `amt` as USD?
+* What is flagged transaction value?
+* Why isn't flagged transaction value the same as fraud loss?
+* What is predicted fraud?
+* What is the difference between probability and classification?
+* What is the purpose of the XGBoost threshold chart?
+* Why is PR-AUC useful for fraud?
+* What does SHAP tell you?
+* What does global SHAP not tell you?
+* What does Isolation Forest add?
+* What does the DQ section show?
+* How would you investigate an incorrect dashboard number?
+* How would you troubleshoot a blank dashboard?
+* How would you improve Power BI performance?
 * How would you implement row-level security?
 * How would you manage refreshes?
-* How would you distinguish a dashboard issue from a pipeline issue?
+* How would you productionize the dashboard?
 
 ---
 
-# 174. Day 8 Interview Questions — Data Modeling
+# 199. Day 8 — Power BI / Data Modeling Questions
 
 Be ready for:
 
 * What is the grain of the transaction view?
-* What is the grain of the executive dataset?
-* What is the grain of the ML metrics dataset?
-* Why shouldn't transaction data be blindly joined to metric tables?
+* What is the grain of the executive overview?
+* What is the grain of XGBoost metrics?
+* What is the grain of SHAP?
+* What is the grain of Isolation Forest metrics?
+* What is the grain of pipeline health?
+* Why shouldn't these datasets be blindly joined?
 * How can joins inflate aggregates?
-* When would you aggregate in SQL versus Power BI?
-* Why create a semantic serving layer?
-* How would you design dimensions for the BI layer?
-* How would you handle slowly changing business attributes?
+* Why use serving views?
+* What belongs in SQL versus Power BI?
+* Why keep the original raw category while creating a display category?
+* Why is event time different from transaction date?
+* Why use the full event timestamp for investigation?
+* How would you build a proper semantic model?
 * How would you prevent duplicated measures?
 
 ---
 
-# 175. Day 8 Interview Questions — ML Consumption
+# 200. Day 8 — ML Consumption Questions
 
 Be ready for:
 
-* How do you expose model probabilities?
-* What is a risk band?
-* Why store the model threshold with the prediction?
+* How is fraud probability generated?
+* How is predicted fraud generated?
+* What is a classification threshold?
+* Why store the threshold?
 * Why store model version?
-* How would you compare model versions?
-* Why show threshold analysis?
-* What does SHAP tell you?
-* What does SHAP not tell you?
+* Why expose threshold analysis?
+* Why is PR-AUC important?
+* What does SHAP measure?
+* What is the difference between global and local SHAP?
 * Why is Isolation Forest separate from XGBoost?
-* How would you monitor model predictions after deployment?
-* How would you detect prediction drift?
+* How would you monitor model drift?
+* How would you monitor prediction drift?
+* How would you compare model versions?
+* How would you introduce a model registry?
+* How would you handle delayed ground truth?
 
 ---
 
-# 176. Day 8 Interview Questions — Consulting / Big 4
+# 201. Day 8 — Consulting / Big 4 Questions
 
 Be ready for:
 
-* Who are the consumers of this platform?
-* How does the architecture support different stakeholders?
-* How would you translate ML results into business decisions?
-* How would you communicate flagged transaction value to executives?
-* How would you prevent stakeholders from interpreting predictions as confirmed fraud?
+* Who are the consumers of the Fraud Risk Overview?
+* Who are the consumers of Transaction Investigation?
+* How would you translate model metrics to a business stakeholder?
+* How would you explain fraud probability to a non-technical user?
+* How would you explain precision and recall?
+* How would you explain the threshold trade-off?
+* How would you prevent users from treating predictions as confirmed fraud?
+* How would you explain flagged transaction value versus fraud loss?
+* What happens when data quality deteriorates?
+* How would you alert stakeholders to pipeline problems?
 * How would you govern dashboard metrics?
-* How would you secure sensitive transaction data?
-* How would you audit access?
-* What would change for a production workload?
+* How would you secure transaction data?
+* How would you implement access control?
 * How would you scale the serving layer?
-* How would you manage cost?
+* How would you manage Power BI costs?
+* What would you change for production?
 * How would you handle conflicting requirements between risk, operations and technology teams?
 
 ---
 
-# 177. Day 8 — Important Accuracy Rules
+# 202. Day 8 — Important Accuracy Rules
 
-When discussing Day 8, avoid these claims unless they are actually implemented:
+When discussing the Power BI implementation, avoid overclaiming.
 
 ### Do not say:
 
@@ -4597,15 +5425,23 @@ When discussing Day 8, avoid these claims unless they are actually implemented:
 
 Instead:
 
-> "The dashboard exposes the model's measured evaluation metrics."
+> "The dashboard exposes measured model evaluation metrics."
 
 ### Do not say:
 
-> "The flagged amount is fraud loss."
+> "The model identifies confirmed fraud."
 
 Instead:
 
-> "It is flagged transaction value."
+> "The model produces a fraud-risk prediction that can be used as an investigation signal."
+
+### Do not say:
+
+> "Flagged transaction value is fraud loss."
+
+Instead:
+
+> "It is the monetary value of transactions classified as flagged."
 
 ### Do not say:
 
@@ -4613,15 +5449,31 @@ Instead:
 
 Instead:
 
-> "The current Gold SHAP output provides global feature importance."
+> "The current SHAP artifact provides global feature importance."
 
 ### Do not say:
 
-> "Synapse makes the platform real-time."
+> "The threshold of 0.5 is the optimal threshold."
 
 Instead:
 
-> "Synapse provides the SQL serving layer over the analytical data lake."
+> "The dashboard exposes the precision-recall trade-off at several thresholds."
+
+### Do not say:
+
+> "Isolation Forest is another fraud classifier."
+
+Instead:
+
+> "Isolation Forest provides a complementary unsupervised anomaly signal."
+
+### Do not say:
+
+> "The dashboard is real-time."
+
+Instead:
+
+> "The current project demonstrates analytical consumption of the processed transaction and ML outputs; production real-time dashboarding would require an appropriate streaming-serving and refresh architecture."
 
 ### Do not say:
 
@@ -4633,195 +5485,223 @@ Instead:
 
 ---
 
-# 178. Day 8 One-Sentence Answers
+# 203. Day 8 — Evidence From the Completed Power BI Dashboards
 
-### Why Synapse Serverless?
+The completed Power BI implementation provides visual evidence for the serving layer.
 
-> "It provides a SQL serving layer over Parquet data already stored in ADLS without requiring a dedicated SQL warehouse."
+## Fraud Risk Overview
 
-### Why a serving layer?
+The dashboard demonstrates:
 
-> "It separates physical lake storage from business-oriented analytical consumption."
+```text
+139.54K transactions
+3,598 flagged transactions
+$1.17M flagged transaction value
+4.56% average fraud probability
 
-### Why multiple views?
+11.74% anomaly rate
+0.082% normal-group fraud rate
+0.9584% anomaly-group fraud rate
+0.0125 Isolation Forest PR-AUC
 
-> "Different stakeholders need different grains and analytical questions."
+244.28K rows received
+139.54K rows valid
+104.74K rows quarantined
+57.12% DQ pass rate
+```
 
-### Why transaction-level investigation?
+It also provides:
 
-> "Investigators need to drill into individual transactions."
+* transaction volume trend
+* state-level flagged transactions
+* XGBoost threshold analysis
+* global SHAP feature importance
 
-### Why an executive view?
+Evidence:
 
-> "Executives need aggregated risk, volume, trend and exposure indicators."
+```text
+docs/evidence/day08-powerbi-fraud-risk-overview.png
+```
 
-### Why an ML view?
+## Transaction Investigation
 
-> "ML and risk users need model performance, threshold, explainability and diagnostic metrics."
+The dashboard demonstrates:
 
-### Why Parquet?
+* state filtering
+* category filtering
+* risk filtering
+* predicted fraud filtering
+* transaction-level details
+* event time
+* merchant
+* category
+* amount
+* location
+* transaction hour
+* customer age
+* distance
+* fraud probability
 
-> "It is a compressed columnar format well suited to analytical workloads in a data lake."
+Evidence:
 
-### Why define grain?
+```text
+docs/evidence/day08-powerbi-transaction-investigation.png
+```
 
-> "Clear grain prevents incorrect joins and inflated aggregations."
-
-### What is flagged transaction value?
-
-> "The monetary value of transactions identified by the model as risky; it is not confirmed fraud loss."
-
-### What does SHAP tell you?
-
-> "It explains the contribution of features to model predictions."
-
-### Does SHAP prove causality?
-
-> "No. It explains model behavior rather than causal relationships."
-
-### Why store model version?
-
-> "So predictions can be associated with the model configuration that produced them."
-
-### Why store model threshold?
-
-> "So downstream users know which probability cutoff produced the classification."
-
-### Why show pipeline health?
-
-> "Because analytical metrics are only useful when users can understand the health of the upstream data pipeline."
-
-### What would you improve next?
-
-> "I would add stronger governance, monitoring, semantic modeling, row-level security and production-grade model lifecycle controls."
-
----
-
-# 179. Day 8 Final Mental Model
+These screenshots demonstrate the final:
 
 ```text
 ADLS
-    ↓
-Analytical Parquet
-    ↓
+ ↓
 Synapse Serverless
-    ↓
-Purpose-Specific Serving Views
-    ↓
-┌──────────────────┬────────────────────┬─────────────────────┐
-│ Executive        │ Investigation      │ ML / Risk           │
-│ Overview         │                    │ Explainability      │
-├──────────────────┼────────────────────┼─────────────────────┤
-│ Volume           │ Transaction        │ ROC-AUC             │
-│ Fraud rate       │ Amount             │ PR-AUC              │
-│ Flagged value    │ Probability        │ Thresholds          │
-│ Geography        │ Risk band          │ SHAP                │
-│ Trend            │ Merchant           │ Anomaly diagnostics │
-│ Risk distribution│ Location           │ Drift diagnostics   │
-└──────────────────┴────────────────────┴─────────────────────┘
-                         ↓
-                      Power BI
+ ↓
+Serving Views
+ ↓
+Power BI
 ```
 
-The key architecture story is:
+path.
+
+---
+
+# 204. Day 8 — Final Architecture Explanation
+
+A concise architecture answer is:
+
+> "The platform stores analytical outputs as Parquet in ADLS Gen2. I then added Synapse Serverless as a SQL serving layer over those files. I created purpose-specific views for transaction investigation, executive aggregation, model metrics, SHAP, anomaly detection and pipeline health. Power BI consumes those serving views rather than directly querying the raw ingestion layer. I kept the views at their natural analytical grains so I wouldn't introduce incorrect joins or duplicated measures."
+
+Architecture:
+
+```text
+                    ADLS Gen2
+                       │
+             ┌─────────┴──────────┐
+             │                    │
+          Gold ML              Audit DQ
+             │                    │
+             └─────────┬──────────┘
+                       ↓
+              Synapse Serverless
+                       ↓
+                serving schema
+                       │
+       ┌───────────────┼────────────────┐
+       ↓               ↓                ↓
+ Transaction       Executive          ML/DQ
+ Investigation      Overview          Outputs
+       │               │                │
+       └───────────────┼────────────────┘
+                       ↓
+                   Power BI
+                       │
+             ┌─────────┴─────────┐
+             ↓                   ↓
+      Fraud Risk Overview   Transaction
+                            Investigation
+```
+
+---
+
+# 205. Day 8 — One-Minute Interview Answer
+
+If an interviewer says:
+
+> **"Walk me through what you did on Day 8."**
+
+Answer:
+
+> "Day 8 was the analytical serving and BI layer. My Gold and audit outputs were already stored as Parquet in ADLS, so I used Synapse Serverless to expose them through a dedicated serving schema. I created purpose-specific views for transaction investigation, executive aggregation, XGBoost metrics, SHAP feature importance, Isolation Forest metrics and pipeline health.
+>
+> "I then connected Power BI to the Synapse serving layer. I consolidated the reporting into two pages: Fraud Risk Overview and Transaction Investigation. The overview combines transaction KPIs, anomaly indicators, pipeline health, XGBoost threshold analysis and global SHAP importance. The investigation page allows users to filter transactions by state, category, risk and predicted fraud and then inspect transaction-level context.
+>
+> "A key design consideration was grain. The transaction view is at transaction grain, while the executive, ML and pipeline datasets have different grains, so I deliberately avoided arbitrary relationships that could duplicate rows and inflate metrics.
+>
+> "The overall architecture is therefore ADLS for storage, Synapse Serverless for SQL serving and Power BI for analytical consumption."
+
+---
+
+# 206. Day 8 — Final Mental Model
+
+The complete project can now be explained as:
+
+```text
+                    DATA PLATFORM
+
+Source
+  ↓
+Ingestion
+  ↓
+Bronze
+  ↓
+Silver
+  ↓
+Data Quality
+  ↓
+Gold
+  ↓
+Machine Learning
+  ↓
+Analytical Serving
+  ↓
+Power BI
+  ↓
+Business / Risk Users
+```
+
+And the Day 8-specific flow is:
+
+```text
+Gold + Audit Parquet
+        ↓
+Synapse Serverless
+        ↓
+Purpose-specific serving views
+        ↓
+Power BI
+        ↓
+┌─────────────────────────────┐
+│ Fraud Risk Overview         │
+│                             │
+│ Business + ML + DQ          │
+└─────────────────────────────┘
+
+┌─────────────────────────────┐
+│ Transaction Investigation   │
+│                             │
+│ Transaction-level analysis  │
+└─────────────────────────────┘
+```
+
+---
+
+# 207. Day 8 Final Interview Takeaway
+
+The strongest message from Day 8 is not:
+
+> "I built a Power BI dashboard."
+
+It is:
+
+> **"I took analytical and ML outputs stored in the lake, defined appropriate serving grains, exposed them through Synapse Serverless SQL views, and delivered stakeholder-specific analytical experiences in Power BI."**
+
+The engineering progression is:
 
 ```text
 Store
   ↓
-Query
+Validate
+  ↓
+Transform
   ↓
 Model
+  ↓
+Explain
   ↓
 Serve
   ↓
 Consume
 ```
 
----
+The key Day 8 lesson is:
 
-# 180. The Key Day 8 Story to Remember
-
-> **"Day 8 completes the path from data and ML outputs to analytical consumption. I used Synapse Serverless as a SQL serving layer over Parquet data in ADLS and designed purpose-specific serving views for executive reporting, transaction investigation and ML explainability. I paid particular attention to data grain so that transaction-level data was not incorrectly mixed with aggregated ML metrics. In Power BI, the goal is not simply to visualize numbers but to give different stakeholders the right level of information: executives see risk and volume trends, investigators see transaction-level detail, and ML or risk analysts see model performance, threshold trade-offs, SHAP and diagnostic information."**
-
----
-
-# 181. Day 8 Checklist
-
-## Synapse
-
-* [ ] Understand Serverless SQL
-* [ ] Understand ADLS → Synapse relationship
-* [ ] Understand external Parquet querying
-* [ ] Understand serving views
-* [ ] Understand why Serverless rather than Dedicated
-* [ ] Understand serving-layer purpose
-
-## Data modeling
-
-* [ ] Know transaction-view grain
-* [ ] Know executive-view grain
-* [ ] Know ML-metric grain
-* [ ] Understand aggregation
-* [ ] Understand join duplication risk
-* [ ] Understand semantic separation
-
-## Power BI
-
-* [ ] Executive dashboard purpose
-* [ ] Investigation dashboard purpose
-* [ ] ML dashboard purpose
-* [ ] Flagged value vs fraud loss
-* [ ] Threshold visualization
-* [ ] SHAP visualization
-* [ ] Pipeline-health visibility
-
-## ML consumption
-
-* [ ] Fraud probability
-* [ ] Predicted fraud
-* [ ] Risk band
-* [ ] Model threshold
-* [ ] Model version
-* [ ] Global SHAP
-* [ ] Isolation Forest
-* [ ] Drift diagnostics
-
-## Engineering judgment
-
-* [ ] Why serving layer?
-* [ ] Why not direct ADLS?
-* [ ] Why multiple views?
-* [ ] Why define grain?
-* [ ] How would you scale?
-* [ ] How would you optimize Power BI?
-* [ ] How would you secure it?
-* [ ] What would you productionize next?
-
----
-
-# 182. Final Day 8 Reminder
-
-The goal is not:
-
-```text
-"I made three Power BI dashboards."
-```
-
-The stronger story is:
-
-```text
-ML outputs
-    ↓
-Curated analytical data
-    ↓
-SQL serving layer
-    ↓
-Purpose-specific views
-    ↓
-Stakeholder-specific consumption
-```
-
-The Day 8 engineering lesson is:
-
-> **"A successful data platform does not stop when the model produces a prediction. The output still needs to be served at the right grain, exposed through an appropriate analytical interface, and communicated differently to different users."**
-
+> **"A data platform does not end when data is transformed or a model produces predictions. The outputs still need to be served at the correct grain and exposed through an interface that supports the decisions and investigations users actually need to perform."**
