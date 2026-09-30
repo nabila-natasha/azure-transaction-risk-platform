@@ -1,1 +1,90 @@
+trigger: none
 
+pool:
+  name: Default
+
+stages:
+
+- stage: Plan
+  displayName: 'Terraform Plan'
+
+  jobs:
+  - job: TerraformPlan
+    displayName: 'Generate Terraform Plan'
+
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "=== Environment ==="
+        echo "Agent: $(Agent.Name)"
+        echo "OS: $(Agent.OS)"
+        terraform version
+        az version
+      displayName: 'Verify build environment'
+
+    - task: AzureCLI@2
+      displayName: 'Terraform Plan'
+      inputs:
+        azureSubscription: 'sc-transaction-risk-platform'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -e
+
+          cd infra/terraform
+
+          echo "=== Terraform Init ==="
+          terraform init
+
+          echo "=== Terraform Validate ==="
+          terraform validate
+
+          echo "=== Terraform Plan ==="
+          terraform plan -out=tfplan
+      env:
+        TF_VAR_synapse_sql_admin_password: $(SYNAPSE_SQL_ADMIN_PASSWORD)
+
+    - publish: infra/terraform/tfplan
+      artifact: terraform-plan
+      displayName: 'Publish Terraform Plan'
+
+
+- stage: Apply
+  displayName: 'Terraform Apply'
+  dependsOn: Plan
+  condition: succeeded()
+
+  jobs:
+  - deployment: TerraformApply
+    displayName: 'Apply Terraform Plan'
+    environment: 'terraform-production'
+
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - checkout: self
+
+          - download: current
+            artifact: terraform-plan
+
+          - task: AzureCLI@2
+            displayName: 'Terraform Apply'
+            inputs:
+              azureSubscription: 'sc-transaction-risk-platform'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                cd infra/terraform
+
+                echo "=== Terraform Init ==="
+                terraform init
+
+                echo "=== Terraform Apply ==="
+                terraform apply -auto-approve tfplan
+            env:
+              TF_VAR_synapse_sql_admin_password: $(SYNAPSE_SQL_ADMIN_PASSWORD)
