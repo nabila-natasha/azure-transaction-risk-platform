@@ -10,10 +10,38 @@ pool:
   name: Default
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- checkout: self
 
 - script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    echo "=== Environment ==="
+    echo "Agent: $(Agent.Name)"
+    echo "OS: $(Agent.OS)"
+    python --version
+    terraform version
+    az version
+  displayName: 'Verify build environment'
+
+- script: |
+    python -m pip install --upgrade pip
+    if [ -f requirements.txt ]; then
+      pip install -r requirements.txt
+    fi
+  displayName: 'Install Python dependencies'
+
+- script: |
+    python -m compileall .
+  displayName: 'Validate Python syntax'
+
+- script: |
+    if [ -d tests ]; then
+      python -m pytest tests -v
+    else
+      echo "No tests directory found; skipping pytest."
+    fi
+  displayName: 'Run Python tests'
+
+- script: |
+    cd infrastructure
+    terraform init -backend=false
+    terraform validate
+  displayName: 'Validate Terraform'
