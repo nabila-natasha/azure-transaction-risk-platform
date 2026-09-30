@@ -5705,3 +5705,678 @@ Consume
 The key Day 8 lesson is:
 
 > **"A data platform does not end when data is transformed or a model produces predictions. The outputs still need to be served at the correct grain and exposed through an interface that supports the decisions and investigations users actually need to perform."**
+
+---
+
+# 208. Day 9–10 — Azure DevOps CI/CD
+
+## What did you implement on Day 9 and Day 10?
+
+> "I implemented a CI/CD workflow for the Azure Transaction Risk Platform using GitHub, Azure DevOps Pipelines and Terraform. CI validates the application and infrastructure code and generates a Terraform plan. CD is a separate deployment pipeline that generates a saved Terraform plan, publishes it as an Azure DevOps Pipeline Artifact, waits for approval through an Azure DevOps Environment, downloads the saved plan in the Apply job, and executes it against Azure."
+
+The important distinction is:
+
+```text
+CI
+↓
+Validate
+↓
+Terraform Plan
+↓
+CI success
+
+CD
+↓
+Terraform Plan
+↓
+Publish tfplan
+↓
+Approval
+↓
+Download tfplan
+↓
+Terraform Apply
+```
+
+The current implementation uses **two separate Azure DevOps pipelines**. The CI pipeline does not automatically trigger the CD pipeline.
+
+---
+
+# 209. CI Pipeline — What Happens?
+
+The CI pipeline is:
+
+```text
+azure-pipelines-ci.yml
+```
+
+Its purpose is to validate the repository before deployment.
+
+The workflow is:
+
+```text
+GitHub
+   ↓
+Checkout
+   ↓
+Verify environment
+   ↓
+Install Python dependencies
+   ↓
+Compile Python syntax
+   ↓
+Run tests if test files exist
+   ↓
+Azure authentication
+   ↓
+terraform init
+   ↓
+terraform validate
+   ↓
+terraform plan
+```
+
+A concise interview answer:
+
+> "My CI pipeline checks the application code and infrastructure code before deployment. It installs dependencies, validates Python syntax, runs tests when actual test files exist, authenticates to Azure through a WIF service connection, initializes the remote Terraform backend, validates the Terraform configuration and generates a plan."
+
+---
+
+# 210. Why Does CI Run Terraform Plan?
+
+A common question is:
+
+> "If CI doesn't deploy anything, why does it run Terraform plan?"
+
+Answer:
+
+> "I use Terraform plan in CI as an infrastructure validation step. It confirms that the Terraform configuration can initialize against the remote backend, authenticate to Azure, validate successfully and produce a valid execution plan. It gives early feedback without changing the Azure infrastructure."
+
+Therefore:
+
+```text
+CI plan
+=
+validation / visibility
+```
+
+rather than:
+
+```text
+CI plan
+=
+deployment
+```
+
+---
+
+# 211. CD Pipeline — What Happens?
+
+The CD pipeline is:
+
+```text
+azure-pipelines-cd.yml
+```
+
+It contains two main stages:
+
+```text
+Plan
+  ↓
+Apply
+```
+
+The Apply stage is protected by the:
+
+```text
+terraform-production
+```
+
+Azure DevOps Environment and its approval check.
+
+The workflow is:
+
+```text
+CD Plan
+   ↓
+terraform plan -out=tfplan
+   ↓
+Publish tfplan as artifact
+   ↓
+Approval
+   ↓
+Apply job starts
+   ↓
+Download artifact
+   ↓
+terraform apply <downloaded tfplan>
+   ↓
+Azure infrastructure changes
+```
+
+---
+
+# 212. What Is `tfplan`?
+
+When Terraform runs:
+
+```bash
+terraform plan -out=tfplan
+```
+
+Terraform creates a physical file named:
+
+```text
+tfplan
+```
+
+Initially, during the Plan job, it exists under:
+
+```text
+infra/terraform/tfplan
+```
+
+The file contains the saved Terraform execution plan.
+
+Conceptually:
+
+```text
+Terraform configuration
+        +
+Current Terraform state
+        +
+Current Azure state
+        ↓
+terraform plan
+        ↓
+tfplan
+```
+
+The plan represents the infrastructure changes Terraform intends to execute.
+
+---
+
+# 213. What Is an Azure DevOps Pipeline Artifact?
+
+An artifact is a file or collection of files that Azure DevOps stores so that another job or stage can use them later.
+
+The CD pipeline publishes:
+
+```yaml
+- publish: infra/terraform/tfplan
+  artifact: terraform-plan
+```
+
+This means:
+
+```text
+Local Plan job
+     │
+     ▼
+infra/terraform/tfplan
+     │
+     ▼
+Azure DevOps Artifact
+     │
+     └── terraform-plan
+             └── tfplan
+```
+
+The artifact is **not another Terraform plan**.
+
+It is simply the saved `tfplan` file being stored by Azure DevOps so it can cross the Plan → Apply job boundary.
+
+---
+
+# 214. Why Can't the Apply Job Just Use `tfplan`?
+
+The Plan and Apply jobs have separate execution environments.
+
+The Plan job creates:
+
+```text
+infra/terraform/tfplan
+```
+
+but the Apply job starts with a fresh checkout of the repository.
+
+Because `tfplan` is generated during the Plan job and is not committed to Git, it is not automatically present in the Apply job.
+
+Therefore:
+
+```text
+Plan job
+    ↓
+create tfplan
+    ↓
+publish artifact
+    ↓
+Apply job
+    ↓
+download artifact
+```
+
+The Apply job downloads the artifact with:
+
+```yaml
+- download: current
+  artifact: terraform-plan
+```
+
+The file is then available under the Azure DevOps pipeline workspace:
+
+```text
+$(Pipeline.Workspace)/terraform-plan/tfplan
+```
+
+---
+
+# 215. Does Terraform Apply Download the Plan?
+
+No.
+
+This distinction is important.
+
+**Azure DevOps downloads the artifact.**
+
+Terraform then reads the downloaded file.
+
+The sequence is:
+
+```text
+Azure DevOps
+    │
+    │ download artifact
+    ▼
+$(Pipeline.Workspace)/terraform-plan/tfplan
+    │
+    │ Terraform reads file
+    ▼
+terraform apply
+    │
+    ▼
+Azure
+```
+
+Therefore, this command:
+
+```bash
+terraform apply -auto-approve "$(Pipeline.Workspace)/terraform-plan/tfplan"
+```
+
+means:
+
+> "Terraform, read this already-created plan file and execute the changes described by it."
+
+---
+
+# 216. Why Did the First Apply Attempt Fail?
+
+The initial Apply command was:
+
+```bash
+terraform apply -auto-approve tfplan
+```
+
+The job had changed into:
+
+```text
+infra/terraform
+```
+
+so Terraform searched for:
+
+```text
+infra/terraform/tfplan
+```
+
+But the downloaded artifact was actually under:
+
+```text
+$(Pipeline.Workspace)/terraform-plan/tfplan
+```
+
+Therefore Terraform returned:
+
+```text
+Failed to load "tfplan" as a plan file
+
+stat tfplan: no such file or directory
+```
+
+The fix was:
+
+```bash
+terraform apply -auto-approve "$(Pipeline.Workspace)/terraform-plan/tfplan"
+```
+
+This was an **artifact-path issue**, not a Terraform authentication or Azure infrastructure failure.
+
+---
+
+# 217. Why Use a Saved Plan Before Apply?
+
+A saved plan provides a clear separation:
+
+```text
+Plan
+  ↓
+Review / Approval
+  ↓
+Apply
+```
+
+The Plan stage determines the intended infrastructure changes.
+
+The approval occurs before deployment.
+
+The Apply stage then executes the saved plan.
+
+A good interview answer:
+
+> "I used a saved Terraform plan so that the deployment stage consumes an explicit plan generated before approval. Azure DevOps transports that plan as an artifact, and the Apply job executes the downloaded plan."
+
+---
+
+# 218. What Is the Role of Each Technology?
+
+This is one of the most important Day 9–10 interview questions.
+
+## GitHub
+
+GitHub is the source-control system.
+
+It stores:
+
+```text
+Python code
+Terraform configuration
+Pipeline YAML
+Documentation
+```
+
+GitHub answers:
+
+> "What code and configuration are we using?"
+
+---
+
+## Azure DevOps
+
+Azure DevOps is the CI/CD orchestration platform.
+
+It:
+
+* runs pipeline jobs
+* checks out the repository
+* executes validation
+* stores pipeline artifacts
+* manages deployment stages
+* manages the deployment environment
+* enforces approval checks
+* records pipeline history
+
+Azure DevOps answers:
+
+> "When and in what sequence should these engineering steps execute?"
+
+---
+
+## Terraform
+
+Terraform is the Infrastructure as Code engine.
+
+It:
+
+* reads Terraform configuration
+* manages Terraform state
+* compares desired and current infrastructure
+* generates infrastructure plans
+* applies infrastructure changes
+* communicates with Azure through the AzureRM provider
+
+Terraform answers:
+
+> "What Azure infrastructure should exist, and what changes are required?"
+
+---
+
+## Azure
+
+Azure is the target cloud platform.
+
+It hosts the actual resources managed by Terraform, such as:
+
+```text
+Resource Groups
+Storage
+Event Hubs
+Data Factory
+Synapse
+Managed Identities
+RBAC assignments
+```
+
+Azure answers:
+
+> "Where does the infrastructure actually run?"
+
+---
+
+# 219. Simple Mental Model
+
+The easiest way to remember the roles is:
+
+```text
+GitHub
+"What code/configuration are we using?"
+       ↓
+Azure DevOps
+"When/how should the workflow run?"
+       ↓
+Terraform
+"What infrastructure changes are required?"
+       ↓
+Azure
+"Actually host those resources."
+```
+
+For deployment:
+
+```text
+GitHub
+   ↓
+Azure DevOps
+   ↓
+Terraform Plan
+   ↓
+Approval
+   ↓
+Terraform Apply
+   ↓
+Azure
+```
+
+---
+
+# 220. CI vs CD — Interview Answer
+
+If asked:
+
+> "What's the difference between your CI and CD pipelines?"
+
+Answer:
+
+> "CI is focused on validation. It checks the Python and Terraform code, authenticates to Azure, initializes the remote backend, validates the Terraform configuration and generates a Terraform plan without applying it.
+>
+> CD is focused on controlled deployment. My CD pipeline generates a saved Terraform plan, publishes it as an Azure DevOps artifact, uses an approval-controlled deployment environment, downloads the saved plan into the Apply job and executes it with Terraform Apply."
+
+Short version:
+
+```text
+CI = prove the change is valid
+
+CD = safely deploy the change
+```
+
+---
+
+# 221. Why Use Workload Identity Federation?
+
+The Azure DevOps service connection uses:
+
+```text
+Workload Identity Federation
+```
+
+rather than storing a long-lived Azure client secret.
+
+The authentication flow is:
+
+```text
+Azure DevOps
+      ↓
+Workload Identity Federation
+      ↓
+Microsoft Entra service principal
+      ↓
+Azure RBAC
+      ↓
+Azure resources
+```
+
+A good interview answer:
+
+> "I used workload identity federation so the pipeline could authenticate to Azure without storing a long-lived client secret in the repository or pipeline configuration."
+
+---
+
+# 222. Terraform Backend in CI/CD
+
+The Terraform state backend is:
+
+```text
+Azure Storage
+    │
+    ├── Resource Group:
+    │   rg-transaction-risk-platform
+    │
+    ├── Storage Account:
+    │   sttfstatebello
+    │
+    ├── Container:
+    │   tfstate
+    │
+    └── State:
+        project4.tfstate
+```
+
+The backend uses Azure AD authentication.
+
+The pipeline identity was granted:
+
+```text
+Storage Blob Data Contributor
+```
+
+on the state storage account.
+
+This separates:
+
+```text
+Terraform configuration
+        ↓
+GitHub
+```
+
+from:
+
+```text
+Terraform state
+        ↓
+Azure Storage
+```
+
+---
+
+# 223. Why Is Terraform State Not Stored in Git?
+
+Terraform state should not normally be committed to Git because it can contain sensitive infrastructure information and represents runtime state rather than source configuration.
+
+The intended separation is:
+
+```text
+Terraform code
+    → GitHub
+
+Terraform state
+    → secure remote backend
+```
+
+---
+
+# 224. Day 9–10 Troubleshooting Story
+
+A useful interview story is:
+
+> "One issue I encountered during CI/CD was that the Terraform backend initially returned a 403 when Terraform tried to access the remote state. I traced this to the Azure RBAC assignment and distinguished the application's client ID from the service principal object ID. I corrected the Storage Blob Data Contributor assignment for the service principal.
+>
+> Later, the CD Apply stage failed because the saved Terraform plan was downloaded as an Azure DevOps artifact into the pipeline workspace, while the Terraform command was looking for `tfplan` in the local `infra/terraform` directory. I corrected the Apply command to use the downloaded artifact path."
+
+This demonstrates troubleshooting rather than only successful execution.
+
+---
+
+# 225. What Is Actually Implemented vs Production Extension?
+
+## Implemented
+
+```text
+GitHub source control
+Azure DevOps CI
+Azure DevOps CD
+Self-hosted Azure DevOps agent
+WIF authentication
+Terraform remote backend
+Terraform plan
+Terraform apply
+Pipeline artifact
+Deployment environment
+Manual approval
+Secret pipeline variable
+```
+
+## Reasonable production extensions
+
+```text
+Automatic CI → CD promotion
+Separate dev / staging / production environments
+Reusable Terraform modules
+Variable groups or external secret management
+Azure Key Vault
+Additional policy checks
+Terraform security scanning
+Automated rollback/recovery procedures
+Multiple deployment approvals
+```
+
+Do not describe those production extensions as already implemented.
+
+---
+
+# 226. Day 9–10 One-Minute Interview Answer
+
+If an interviewer asks:
+
+> **"Tell me about the CI/CD implementation for this project."**
+
+Answer:
+
+> "For CI/CD, I separated infrastructure validation from deployment. My CI pipeline runs Python validation and then authenticates to Azure using workload identity federation. It initializes the remote Terraform backend, validates the configuration and generates a Terraform plan without changing infrastructure.
+>
+> I then built a separate CD pipeline with a Plan and Apply stage. The Plan stage generates a saved `tfplan` file and publishes it as an Azure DevOps Pipeline Artifact. The deployment targets a `terraform-production` environment with a manual approval check. After approval, the Apply job downloads the artifact and runs Terraform Apply against that saved plan.
+>
+> One issue I had to troubleshoot was the artifact path: the Apply job is a separate execution environment, so the original `tfplan` file wasn't present under `infra/terraform`. Azure DevOps had downloaded it into the pipeline workspace, so I changed Terraform Apply to reference the downloaded artifact path explicitly.
+>
+> The overall separation is GitHub for source control, Azure DevOps for orchestration and approvals, Terraform for Infrastructure as Code, and Azure as the target infrastructure platform."
+
