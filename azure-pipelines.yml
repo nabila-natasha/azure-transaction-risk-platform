@@ -37,10 +37,11 @@ steps:
   displayName: 'Validate Python syntax'
 
 - script: |
-    if [ -d tests ]; then
+    if find tests -type f -name "test_*.py" -o -name "*_test.py" | grep -q .; then
       python -m pytest tests -v
     else
-      echo "No tests directory found; skipping pytest."
+      echo "No Python test files found; pytest test suite is not yet implemented."
+      echo "Skipping automated Python tests."
     fi
   displayName: 'Run Python tests'
 
