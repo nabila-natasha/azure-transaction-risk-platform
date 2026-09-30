@@ -65,3 +65,5 @@ steps:
 
       echo "=== Terraform Plan ==="
       terraform plan -out=tfplan
+  env:
+      TF_VAR_synapse_sql_admin_password: $(SYNAPSE_SQL_ADMIN_PASSWORD)
