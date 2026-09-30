@@ -44,9 +44,24 @@ steps:
       echo "Skipping automated Python tests."
     fi
   displayName: 'Run Python tests'
+- task: AzureCLI@2
+  displayName: 'Terraform Plan'
+  inputs:
+    azureSubscription: 'sc-transaction-risk-platform'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      set -e
 
-- script: |
-    cd infrastructure
-    terraform init -backend=false
-    terraform validate
-  displayName: 'Validate Terraform'
+      echo "=== Azure Authentication ==="
+      az account show
+
+      echo "=== Terraform Init ==="
+      cd infra/terraform
+      terraform init
+
+      echo "=== Terraform Validate ==="
+      terraform validate
+
+      echo "=== Terraform Plan ==="
+      terraform plan -out=tfplan
