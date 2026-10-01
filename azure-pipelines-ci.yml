@@ -1,8 +1,3 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - main
 
@@ -23,27 +18,18 @@ steps:
 
 - script: |
     python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
     python -m pip install pytest
-
-    if [ -f requirements.txt ]; then
-      python -m pip install -r requirements.txt
-    else
-      echo "No requirements.txt found; continuing with pytest."
-    fi
   displayName: 'Install Python dependencies'
 
 - script: |
-    python -m compileall .
+    python -m compileall scripts
   displayName: 'Validate Python syntax'
 
 - script: |
-    if find tests -type f -name "test_*.py" -o -name "*_test.py" | grep -q .; then
-      python -m pytest tests -v
-    else
-      echo "No Python test files found; pytest test suite is not yet implemented."
-      echo "Skipping automated Python tests."
-    fi
-  displayName: 'Run Python tests'
+    python -m pytest tests -q
+  displayName: 'Run Python test suite'
+
 - task: AzureCLI@2
   displayName: 'Terraform Plan'
   inputs:
@@ -66,4 +52,4 @@ steps:
       echo "=== Terraform Plan ==="
       terraform plan -out=tfplan
   env:
-      TF_VAR_synapse_sql_admin_password: $(SYNAPSE_SQL_ADMIN_PASSWORD)
+    TF_VAR_synapse_sql_admin_password: $(SYNAPSE_SQL_ADMIN_PASSWORD)
