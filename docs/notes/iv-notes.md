@@ -6380,3 +6380,579 @@ Answer:
 >
 > The overall separation is GitHub for source control, Azure DevOps for orchestration and approvals, Terraform for Infrastructure as Code, and Azure as the target infrastructure platform."
 
+---
+
+# 227. What Did You Complete on Day 11?
+
+Day 11 focused on production readiness.
+
+The main additions were:
+
+```text
+Automated Python tests
+ML validation tests
+Feature contract tests
+Data-quality tests
+Silver-derived test fixture
+CI test execution
+Terraform plan artifact
+Production approval
+Deployment smoke validation
+Rollback documentation
+Final CI/CD validation
+```
+
+The objective was to move the project from:
+
+> "The pipeline works."
+
+to:
+
+> "The pipeline has validation, controlled deployment, deployment verification, and a documented recovery process."
+
+---
+
+# 228. How Many Automated Tests Did You Add?
+
+The final automated test suite contains:
+
+```text
+16 tests
+```
+
+The tests cover:
+
+```text
+Feature engineering
+ML feature contract
+Data quality
+Model smoke validation
+```
+
+The final result was:
+
+```text
+16 passed
+```
+
+### Interview Answer
+
+> "I added automated tests around feature engineering, the ML feature contract, data quality, and model smoke validation. The final suite contains 16 tests, all of which passed during CI validation."
+
+---
+
+# 229. Why Use a Real Silver-Derived Fixture?
+
+The test fixture was derived from the Silver transaction structure rather than being an arbitrary toy dataset.
+
+The fixture is:
+
+```text
+tests/fixtures/silver_transactions_sample.parquet
+```
+
+It contains:
+
+```text
+100 rows
+```
+
+The purpose is to make the automated tests representative of the data structure used by the downstream ML workflow.
+
+This reduces the risk of tests passing against a completely unrealistic mock dataset.
+
+---
+
+# 230. Why Test the ML Feature Contract?
+
+The ML pipeline depends on a known set of input features.
+
+The expected feature contract is:
+
+```text
+amt
+city_pop
+lat
+long
+merch_lat
+merch_long
+transaction_hour
+day_of_week
+month
+customer_age
+distance_km
+```
+
+Testing the contract helps detect upstream changes such as:
+
+```text
+Missing feature
+Unexpected feature
+Renamed feature
+Incorrect feature order
+Unexpected schema change
+```
+
+### Interview Answer
+
+> "I treated the ML feature set as a contract because upstream data changes can silently break downstream model behaviour. The automated test verifies that the expected feature set remains stable."
+
+---
+
+# 231. Why Add Smoke Tests Instead of Only Unit Tests?
+
+Unit tests validate individual pieces of logic.
+
+A smoke test provides a lightweight check that the broader workflow can execute successfully against representative data.
+
+The project therefore uses both:
+
+```text
+Unit / Contract Validation
+            +
+Workflow-Level Smoke Validation
+```
+
+The goal is not to prove production model accuracy.
+
+The goal is to detect obvious integration or execution failures before deployment.
+
+---
+
+# 232. Why Publish the Terraform Plan as an Artifact?
+
+The Plan stage produces:
+
+```text
+tfplan
+```
+
+The plan is published as an Azure DevOps Pipeline Artifact.
+
+The Apply stage then downloads that exact artifact.
+
+The workflow is:
+
+```text
+Terraform Plan
+      |
+      v
+Saved tfplan
+      |
+      v
+Pipeline Artifact
+      |
+      v
+Production Approval
+      |
+      v
+Download Artifact
+      |
+      v
+Terraform Apply
+```
+
+This makes the deployment process more explicit and auditable.
+
+It also helps ensure that the infrastructure plan reviewed during the deployment workflow is the same plan that is ultimately applied.
+
+---
+
+# 233. Why Does the Apply Stage Need the Artifact Path?
+
+The Plan and Apply jobs do not share the same local working directory.
+
+The downloaded artifact is placed under:
+
+```text
+$(Pipeline.Workspace)/terraform-plan/tfplan
+```
+
+Therefore, this command:
+
+```bash
+terraform apply -auto-approve tfplan
+```
+
+fails when Terraform is working in:
+
+```text
+infra/terraform
+```
+
+because there is no local:
+
+```text
+infra/terraform/tfplan
+```
+
+The corrected command is:
+
+```bash
+terraform apply -auto-approve "$(Pipeline.Workspace)/terraform-plan/tfplan"
+```
+
+This was a deployment artifact-path problem rather than an Azure authentication problem.
+
+### Interview Explanation
+
+> "The Plan and Apply jobs run in separate pipeline jobs, so the local workspace is not shared. I published the Terraform plan as an artifact, downloaded it in the Apply job, and referenced the artifact using `$(Pipeline.Workspace)`."
+
+---
+
+# 234. What Is the Production Approval Doing?
+
+The CD pipeline targets:
+
+```text
+terraform-production
+```
+
+The Azure DevOps environment provides a controlled approval point before Terraform Apply.
+
+Conceptually:
+
+```text
+Code
+  |
+  v
+CI Validation
+  |
+  v
+Terraform Plan
+  |
+  v
+Production Approval
+  |
+  v
+Terraform Apply
+```
+
+The approval prevents the deployment workflow from automatically modifying production infrastructure without a controlled deployment decision.
+
+---
+
+# 235. What Does the Post-Deployment Smoke Test Prove?
+
+The smoke validation checks the deployed Azure environment after Terraform Apply.
+
+It verifies:
+
+```text
+Azure subscription
+Resource group
+Resource provisioning state
+Deployed resources
+```
+
+The production resource group is:
+
+```text
+rg-transaction-risk-platform
+```
+
+The smoke test does not prove that every application behaviour is correct.
+
+Instead, it provides a lightweight deployment-health check confirming that the expected Azure infrastructure exists after deployment.
+
+---
+
+# 236. How Did You Validate the Final Project?
+
+The final validation was performed on:
+
+```text
+main
+```
+
+### Git State
+
+```text
+HEAD:
+654eff1
+```
+
+### Remote
+
+```text
+origin/main
+```
+
+### Working Tree
+
+```text
+clean
+```
+
+### CI
+
+```text
+SUCCESS
+```
+
+### Automated Tests
+
+```text
+16 passed
+```
+
+### CD
+
+```text
+SUCCESS
+```
+
+### Deployment Smoke Validation
+
+```text
+SUCCESS
+```
+
+### Interview Answer
+
+> "I validated the final state on the main branch. The working tree was clean and synchronized with origin. The CI pipeline passed all 16 automated tests and completed Terraform validation and planning. The CD pipeline then successfully applied the approved Terraform plan and completed post-deployment smoke validation."
+
+---
+
+# 237. Is the CI/CD Pipeline Fully Automatic?
+
+Be precise.
+
+The CI/CD pipeline itself is implemented and has been successfully executed.
+
+The remaining issue is the automatic:
+
+```text
+GitHub Push
+      |
+      v
+Azure DevOps CI Trigger
+```
+
+integration.
+
+Manual CI execution against `main` succeeds, and manual CD execution against `main` succeeds.
+
+Therefore, do not claim:
+
+> "Every GitHub push automatically deploys to production."
+
+Instead, say:
+
+> "I implemented and validated Azure DevOps CI/CD with automated testing, Terraform planning, controlled production approval, Terraform deployment, and post-deployment smoke validation. The remaining GitHub push-trigger integration is a configuration follow-up."
+
+This is more accurate and demonstrates engineering honesty.
+
+---
+
+# 238. Why Separate CI and CD?
+
+CI answers:
+
+> "Is this change valid?"
+
+CD answers:
+
+> "Can this validated change be deployed in a controlled way?"
+
+In this project:
+
+```text
+CI
+ |
+ +--> Python Validation
+ |
+ +--> pytest
+ |
+ +--> Terraform Validate
+ |
+ +--> Terraform Plan
+```
+
+followed by:
+
+```text
+CD
+ |
+ +--> Terraform Plan
+ |
+ +--> Publish Plan
+ |
+ +--> Production Approval
+ |
+ +--> Terraform Apply
+ |
+ +--> Smoke Validation
+```
+
+The separation reduces the risk of infrastructure being changed merely because source code was committed.
+
+---
+
+# 239. What Would You Add for a Larger Production Platform?
+
+The project deliberately focuses on demonstrating the core engineering workflow.
+
+Possible production extensions include:
+
+```text
+Development / staging / production environments
+Automated promotion between environments
+Azure Key Vault
+Centralized secret management
+Terraform modules
+Terraform security scanning
+Policy-as-code
+Containerized processing
+Data observability
+Pipeline monitoring
+Alerting
+Automated recovery workflows
+Model monitoring
+Data drift detection
+Model drift detection
+```
+
+These should be described as **future extensions**, not as implemented features.
+
+---
+
+# 240. What Is the Most Important Engineering Lesson From the Project?
+
+### Interview Answer
+
+> "The main lesson was that a data platform is not just about getting data into Azure. I needed to think about data quality, reproducibility, infrastructure state, authentication, testing, deployment control, and operational validation. The CI/CD work made those concerns explicit because I had to prove that the infrastructure could be planned, approved, deployed, and validated consistently."
+
+---
+
+# 241. Project Architecture in One Minute
+
+### Interview Answer
+
+> "The platform ingests transaction data through both batch and simulated streaming paths. Azure Data Factory handles the historical batch path while Event Hubs is used for replayed near-real-time events. Both paths converge into the Bronze data layer in ADLS. Bronze data goes through validation and data-quality processing into Silver, with invalid records separated into quarantine. The Silver data is then used for feature engineering and ML preparation. Terraform manages the Azure infrastructure, while Azure DevOps handles CI/CD, testing, Terraform planning, production approval, and deployment validation."
+
+---
+
+# 242. Why Have Both Batch and Streaming?
+
+The project deliberately demonstrates two ingestion patterns.
+
+```text
+Historical Data
+      |
+      v
+Azure Data Factory
+      |
+      v
+Bronze
+```
+
+and:
+
+```text
+Near-Real-Time Replay
+      |
+      v
+Azure Event Hubs
+      |
+      v
+Bronze
+```
+
+Both eventually converge into the same downstream data-quality and Silver processing workflow.
+
+This demonstrates that the downstream platform does not need to be completely redesigned when the ingestion mechanism changes.
+
+---
+
+# 243. What Is the Difference Between Event Time and Ingestion Time?
+
+For the streaming replay:
+
+```text
+event_time
+```
+
+represents the original transaction timestamp:
+
+```text
+trans_date_trans_time
+```
+
+while:
+
+```text
+ingestion_time
+```
+
+represents when the platform received or processed the event.
+
+This distinction is important because an event may arrive later than the time at which it actually occurred.
+
+### Example
+
+```text
+Transaction occurred:
+10:00
+
+Event received:
+10:05
+
+event_time     = 10:00
+ingestion_time = 10:05
+```
+
+This allows the platform to reason about late-arriving events.
+
+---
+
+# 244. What Is the Bronze-to-Silver Data Quality Gate?
+
+The Bronze layer is treated as the landing layer.
+
+The Silver layer represents trusted downstream data.
+
+The quality gate sits between them:
+
+```text
+Bronze
+  |
+  v
+Validation
+  |
+  +------> Valid ------> Silver
+  |
+  +------> Invalid ----> Quarantine
+```
+
+This prevents known-invalid records from silently entering the trusted analytical dataset.
+
+---
+
+# 245. Why Is Quarantine Better Than Silently Dropping Bad Records?
+
+Dropping invalid records would make data loss difficult to investigate.
+
+Quarantine preserves rejected records for:
+
+```text
+Investigation
+Debugging
+Reprocessing
+Data-quality monitoring
+Root-cause analysis
+```
+
+### Key Principle
+
+> "Reject bad data explicitly rather than silently losing it."
+
+---
+
+# 246. Final Project Elevator Pitch
+
+> "I built an end-to-end Azure transaction-risk platform that combines batch and event-driven ingestion, ADLS Bronze and Silver processing, data-quality controls, ML feature engineering, Terraform Infrastructure as Code, and Azure DevOps CI/CD. I added automated tests, Terraform plan artifact promotion, production approval, and post-deployment smoke validation. The final CI and CD workflows were successfully validated on the main branch, with the remaining GitHub push-trigger integration documented as a follow-up configuration item."
+
+
+
+
