@@ -106,13 +106,13 @@ stages:
 
                 echo "Checking resource group..."
                 az group show \
-                  --name rg-transaction-risk \
+                  --name rg-transaction-risk-platform \
                   --query "{name:name,location:location,provisioningState:properties.provisioningState}" \
                   -o table
 
                 echo "Checking deployed resources..."
                 az resource list \
-                  --resource-group rg-transaction-risk \
+                  --resource-group rg-transaction-risk-platform \
                   --query "[].{name:name,type:type,state:provisioningState}" \
                   -o table
 
