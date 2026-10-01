@@ -662,26 +662,49 @@ azure-transaction-risk-platform/
 │   └── fixtures/
 │
 ├── docs/
+│   ├── notes/
+│   │   └── ...
+│   ├── evidence/
+│   │   └── ...
 │   ├── rollback.md
 │   ├── day11-production-readiness.md
 │   └── project-completion.md
 │
 ├── infra/
 │   └── terraform/
+│       ├── README.md
+│       ├── main.tf
+│       ├── providers.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── ...
 │
 ├── ingestion/
+│   ├── event_hubs/
+│   │   ├── producer.py
+│   │   └── consumer.py
+│   └── processing/
+│       └── bronze_to_silver.py
+│
+├── sql/
+│   └── serving/
+│       └── 01_create_serving_layer.sql
 │
 ├── scripts/
 │   ├── __init__.py
 │   └── ...
 │
-└── tests/
-    ├── fixtures/
-    ├── test_data_quality.py
-    ├── test_feature_engineering.py
-    ├── test_ml_contract.py
-    └── test_model_smoke.py
+├── tests/
+│   ├── fixtures/
+│   ├── test_data_quality.py
+│   ├── test_feature_engineering.py
+│   ├── test_ml_contract.py
+│   └── test_model_smoke.py
+│
+└── sandbox-day1/
+    └── ...
 ```
+`sandbox-day1/` contains historical Terraform experimentation retained for reference. The authoritative infrastructure configuration used by the current project and CI/CD workflow is maintained under `infra/terraform/`.
 
 ---
 
