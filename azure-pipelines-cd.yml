@@ -1,3 +1,4 @@
+cat > azure-pipelines-cd.yml <<'EOF'
 trigger: none
 
 pool:
@@ -89,3 +90,31 @@ stages:
                 terraform apply -auto-approve "$(Pipeline.Workspace)/terraform-plan/tfplan"
             env:
               TF_VAR_synapse_sql_admin_password: $(SYNAPSE_SQL_ADMIN_PASSWORD)
+
+          - task: AzureCLI@2
+            displayName: 'Post-Deployment Smoke Validation'
+            inputs:
+              azureSubscription: 'sc-transaction-risk-platform'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -e
+
+                echo "=== Post-Deployment Smoke Validation ==="
+
+                echo "Checking Azure subscription..."
+                az account show --query "{name:name,id:id}" -o table
+
+                echo "Checking resource group..."
+                az group show \
+                  --name rg-transaction-risk \
+                  --query "{name:name,location:location,provisioningState:properties.provisioningState}" \
+                  -o table
+
+                echo "Checking deployed resources..."
+                az resource list \
+                  --resource-group rg-transaction-risk \
+                  --query "[].{name:name,type:type,state:provisioningState}" \
+                  -o table
+
+                echo "=== Smoke validation completed ==="
