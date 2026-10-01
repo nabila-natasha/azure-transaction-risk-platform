@@ -1,4 +1,3 @@
-cat > azure-pipelines-cd.yml <<'EOF'
 trigger: none
 
 pool:
