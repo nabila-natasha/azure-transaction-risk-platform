@@ -776,3 +776,27 @@ A concise explanation of the project:
 * Automatic GitHub push trigger integration with Azure DevOps
 
 The core CI/CD workflow has been successfully validated through manual pipeline execution, while the GitHub push trigger remains a separate integration configuration item.
+
+---
+
+## 24. Evidence
+
+Selected screenshots demonstrating the implementation and validation of the platform.
+
+### CI/CD Validation
+
+- [Azure DevOps CI — Successful](docs/evidence/day11-ci-success.PNG)
+- [Azure DevOps CD — Successful](docs/evidence/day11-cd-success.PNG)
+
+### Data Engineering & Security
+
+- [ADF RBAC](docs/evidence/day03-adf-rbac.PNG)
+- [Synapse RBAC](docs/evidence/day08-syn-rbac.PNG)
+- [Terraform State Storage RBAC](docs/evidence/day09-sttfstatebello-storage-rbac.PNG)
+- [Azure DevOps Workload Identity Federation](docs/evidence/day09-azure-devops-workload-identity-federation.PNG)
+
+### Data & Analytics
+
+- [Data Model](docs/evidence/day08-data-model.PNG)
+- [Power BI Fraud Risk Overview](docs/evidence/day08-powerbi-fraud-risk-overview.PNG)
+- [Power BI Transaction Investigation](docs/evidence/day08-powerbi-transaction-investigation.PNG)
