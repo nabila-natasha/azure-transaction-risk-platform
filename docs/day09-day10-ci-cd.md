@@ -261,7 +261,136 @@ It is simply the saved `tfplan` file being transferred between pipeline executio
 
 ---
 
-# 6. Apply Stage
+# 6. Agent Selection and Execution Environment
+
+## Microsoft-hosted Agent — Initial Attempt
+
+The initial Day 9 configuration attempted to use a Microsoft-hosted Linux x64 agent:
+
+```yaml
+pool:
+  vmImage: ubuntu-latest
+```
+
+The pipeline configuration itself was valid, but Azure DevOps reported that the organization had:
+
+```text
+max concurrent = 0
+```
+
+for Microsoft-hosted parallel jobs.
+
+This meant Azure DevOps could not allocate a Microsoft-hosted worker to execute the pipeline.
+
+This was an **agent availability/capacity limitation**, not a failure in the Python code, Terraform configuration, GitHub integration, or Azure authentication.
+
+---
+
+## Self-hosted Agent — Final Implementation
+
+The project was then configured to use a self-hosted Linux x64 Azure DevOps agent hosted in Azure Cloud Shell.
+
+The pipeline uses:
+
+```yaml
+pool:
+  name: Default
+```
+
+The registered agent is:
+
+```text
+bello-cloudshell
+```
+
+The execution path is:
+
+```text
+GitHub
+   │
+   ▼
+Azure DevOps
+   │
+   ▼
+Default Agent Pool
+   │
+   ▼
+bello-cloudshell
+   │
+   ▼
+Azure Cloud Shell
+(Linux x64)
+   │
+   ├── Python / pytest
+   ├── Terraform
+   └── Azure CLI
+```
+
+### Microsoft-hosted vs. Self-hosted
+
+Both approaches can use Linux x64. The important difference is **who provides and manages the execution machine**.
+
+|                        | Microsoft-hosted                            | Self-hosted                  |
+| ---------------------- | ------------------------------------------- | ---------------------------- |
+| Worker                 | Microsoft-provided temporary VM             | User-managed environment     |
+| Example                | `ubuntu-latest`                             | `bello-cloudshell`           |
+| Pipeline configuration | `vmImage`                                   | `name: Default`              |
+| Operating system       | Linux x64                                   | Linux x64                    |
+| Tool environment       | Microsoft-managed image                     | User-managed                 |
+| Capacity               | Depends on hosted parallel-job availability | Uses the registered agent    |
+| Lifecycle              | Temporary execution environment             | Registered agent environment |
+
+For this portfolio, the self-hosted agent was selected because the Microsoft-hosted option had no available concurrent job capacity.
+
+---
+
+## Final CI Trigger Validation
+
+The final GitHub-to-Azure DevOps integration was validated by pushing directly from the terminal:
+
+```bash
+git push origin main
+```
+
+The verified execution path was:
+
+```text
+GitHub Push
+     │
+     ▼
+Azure DevOps CI
+     │
+     ▼
+Default Agent Pool
+     │
+     ▼
+bello-cloudshell
+     │
+     ▼
+Python Tests
+     │
+     ▼
+Terraform Plan
+     │
+     ▼
+CI Successful
+```
+
+Azure DevOps run:
+
+```text
+#20261001.11
+```
+
+was created from the repository push and completed successfully.
+
+This confirms that a push to `main` automatically triggers the CI pipeline.
+
+The CD pipeline remains a separate controlled release workflow and is **not automatically triggered by CI**. CD is run manually after CI validation and uses the approval-controlled `terraform-production` environment before Terraform Apply.
+
+---
+
+# 7. Apply Stage
 
 The Apply stage uses a deployment job targeting:
 
@@ -298,7 +427,7 @@ Terraform does **not** download the plan. Azure DevOps performs the artifact dow
 
 ---
 
-# 7. Approval Gate
+# 8. Approval Gate
 
 The deployment job targets:
 
@@ -333,7 +462,7 @@ Azure DevOps supports approval checks on environments to control when a deployme
 
 ---
 
-# 8. Why the Apply Stage Uses the Saved Plan
+# 9. Why the Apply Stage Uses the Saved Plan
 
 A saved Terraform plan provides a clear separation between:
 
@@ -367,7 +496,7 @@ because `terraform apply` without a saved plan can generate a new plan and reque
 
 ---
 
-# 9. CI Plan vs CD Plan
+# 10. CI Plan vs CD Plan
 
 The current portfolio implementation has both CI and CD performing Terraform planning, but they serve different purposes.
 
@@ -402,11 +531,11 @@ CD
 └── Apply saved plan
 ```
 
-The current implementation intentionally keeps CI and CD as separate Azure DevOps pipelines for demonstration of the two lifecycle concepts.
+The current implementation intentionally keeps CI and CD as separate Azure DevOps pipelines so that infrastructure validation and controlled infrastructure deployment remain distinct lifecycle stages.
 
 ---
 
-# 10. Roles of the Main Components
+# 11. Roles of the Main Components
 
 ## GitHub
 
@@ -478,7 +607,7 @@ Azure therefore contains the infrastructure that Terraform manages.
 
 ---
 
-# 11. Overall Responsibility Model
+# 12. Overall Responsibility Model
 
 A useful way to remember the architecture is:
 
@@ -518,7 +647,7 @@ Azure infrastructure
 
 ---
 
-# 12. Security
+# 13. Security
 
 The pipeline avoids storing Azure credentials in GitHub.
 
@@ -549,7 +678,7 @@ The password is not committed to GitHub.
 
 ---
 
-# 13. Day 9 Evidence
+# 14. Day 9 Evidence
 
 The completed CI pipeline demonstrates:
 
@@ -567,7 +696,7 @@ The completed CI pipeline demonstrates:
 
 ---
 
-# 14. Day 10 Evidence
+# 15. Day 10 Evidence
 
 The completed CD pipeline demonstrates:
 
@@ -584,7 +713,7 @@ The completed CD pipeline demonstrates:
 
 ---
 
-# 15. Troubleshooting Evidence
+# 16. Troubleshooting Evidence
 
 During implementation, the CD Apply stage initially failed because Terraform searched for:
 
@@ -609,7 +738,7 @@ This demonstrated the distinction between:
 
 ---
 
-# 16. Final CI/CD Flow
+# 17. Final CI/CD Flow
 
 ```text
                          GITHUB
