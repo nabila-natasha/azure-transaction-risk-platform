@@ -383,7 +383,43 @@ The pipeline performs:
 8. Terraform validation
 9. Terraform plan
 
-The CI pipeline has been manually executed successfully against the `main` branch.
+The CI pipeline was validated by pushing directly to `main`.
+
+A terminal `git push origin main` automatically triggered Azure DevOps CI, and the resulting pipeline completed successfully.
+
+The verified execution path was:
+
+```text
+git push origin main
+        |
+        v
+GitHub
+        |
+        v
+Azure DevOps CI
+        |
+        v
+Default Agent Pool
+        |
+        v
+bello-cloudshell
+        |
+        v
+Python Tests + Terraform Plan
+        |
+        v
+CI Successful
+```
+
+Azure DevOps run:
+
+```text
+#20261001.11
+```
+
+completed successfully.
+
+The CD pipeline remains a separate controlled release workflow and is not automatically triggered by CI.
 
 ---
 
@@ -583,29 +619,21 @@ Day 11 focused on turning the earlier engineering work into a controlled deploym
 
 ## 18. Final Validation
 
-The final repository state was validated as follows:
+The final repository state was validated on the `main` branch.
+
+The authoritative remote branch is:
 
 ```text
-Branch:
-main
-
-HEAD:
-654eff1
-
-Remote:
 origin/main
-
-Working tree:
-clean
 ```
 
-Final Git validation:
+Final Git validation is performed with:
 
 ```bash
 git status
 ```
 
-Result:
+Expected clean state:
 
 ```text
 On branch main
@@ -614,33 +642,58 @@ Your branch is up to date with 'origin/main'.
 nothing to commit, working tree clean
 ```
 
-The final CI pipeline completed successfully.
+The final CI pipeline was validated by pushing directly to `main`.
 
-The final CD pipeline completed successfully, including:
+The final CD pipeline was separately executed against `main` and completed successfully, including:
 
 * Terraform Plan
+* Terraform Plan Artifact
+* Production Approval
 * Terraform Apply
-* Production approval
-* Post-deployment smoke validation
+* Post-Deployment Smoke Validation
 
 ---
 
-## 19. Known CI Trigger Configuration Item
+## 19. GitHub Push Trigger Validation
 
-The Azure DevOps pipeline has been validated successfully through manual execution.
+The GitHub-to-Azure DevOps CI integration was validated by pushing directly from the terminal:
 
-One remaining integration item is the automatic GitHub push trigger:
-
-```text
-GitHub Push
-    |
-    X
-Azure DevOps Automatic CI Trigger
+```bash
+git push origin main
 ```
 
-Manual execution against `main` succeeds, so this remaining item is isolated to the GitHub-to-Azure-DevOps trigger integration rather than the CI pipeline implementation itself.
+```text
+The verified execution path is:
 
-This should be treated as a follow-up configuration task.
+GitHub Push
+      |
+      v
+Azure DevOps CI
+      |
+      v
+Default Agent Pool
+      |
+      v
+bello-cloudshell
+      |
+      v
+CI Execution
+      |
+      v
+CI Successful
+```
+
+Azure DevOps run:
+
+```text
+#20261001.11
+```
+
+was created from the repository push and completed successfully.
+
+This confirms that a push to `main` automatically triggers the CI pipeline.
+
+The CD pipeline remains intentionally separate from the CI trigger. A successful CI run does not automatically execute Terraform Apply. CD is manually initiated as a controlled release workflow and uses the `terraform-production` approval environment before infrastructure changes are applied.
 
 ---
 
@@ -737,13 +790,19 @@ Automated Testing
 Infrastructure as Code
       |
       v
-CI
+      CI
+      |
+      v
+    CD Plan
+      |
+      v
+Plan Artifact
       |
       v
 Production Approval
       |
       v
-CD
+Terraform Apply
       |
       v
 Deployment Validation
@@ -769,7 +828,7 @@ The project therefore demonstrates practical integration between:
 
 A concise explanation of the project:
 
-> I built an Azure transaction-risk data platform that takes transaction data through ingestion, Bronze and Silver data layers, data-quality validation, feature engineering, and ML preparation. I provisioned the Azure infrastructure with Terraform and implemented Azure DevOps CI/CD with automated Python tests, Terraform plan and apply, a production approval environment, plan artifact promotion, and post-deployment smoke validation. I also documented a controlled rollback process. The final CI and CD pipelines were successfully validated on the main branch.
+> I built an Azure transaction-risk data platform that takes transaction data through ingestion, Bronze and Silver data layers, data-quality validation, feature engineering, and ML preparation. I provisioned the Azure infrastructure with Terraform and implemented Azure DevOps CI/CD with automated Python tests, Terraform planning and deployment, production approval, Terraform plan artifact promotion, and post-deployment smoke validation. A direct GitHub push to `main` automatically triggers the CI pipeline on a self-hosted Azure DevOps agent running in Azure Cloud Shell, while CD remains a separate controlled deployment workflow. I also documented a controlled rollback process.
 
 ---
 
@@ -788,17 +847,29 @@ A concise explanation of the project:
 * ML validation
 * Automated tests
 * Azure DevOps CI
+* GitHub-to-Azure DevOps CI trigger
 * Azure DevOps CD
+* Terraform plan artifact promotion
 * Production approval
 * Deployment smoke validation
 * Rollback documentation
-* Final Git state
+* Final Git validation
 
-### Remaining Configuration Item
+The final CI workflow has been validated through a direct GitHub push to `main`.
 
-* Automatic GitHub push trigger integration with Azure DevOps
+The final CD workflow has been separately validated through a controlled manual deployment, including production approval, Terraform Apply, and post-deployment smoke validation.
 
-The core CI/CD workflow has been successfully validated through manual pipeline execution, while the GitHub push trigger remains a separate integration configuration item.
+The project therefore demonstrates a complete separation between:
+
+```text
+Automatic CI Validation
+```
+
+and:
+
+```text
+Controlled CD Deployment
+```
 
 ---
 
