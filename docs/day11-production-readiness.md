@@ -326,15 +326,15 @@ f402a0f  ci: run automated Python test suite
 
 ## 11. Final CI Validation
 
-CI was manually executed against:
+CI was validated against:
 
 ```text
 main
 ```
 
-The pipeline completed successfully.
+A direct terminal push to `main` automatically triggered Azure DevOps CI.
 
-This validated:
+The successful CI execution validated:
 
 * Python environment
 * Python dependencies
@@ -344,6 +344,43 @@ This validated:
 * Terraform initialization
 * Terraform validation
 * Terraform plan
+
+The automated test suite completed successfully:
+
+```text
+16 passed
+```
+
+This confirmed the GitHub-to-Azure DevOps CI trigger and the self-hosted execution path.
+
+The verified execution path was:
+
+```text
+git push origin main
+        │
+        ▼
+      GitHub
+        │
+        ▼
+Azure DevOps CI
+        │
+        ▼
+bello-cloudshell
+        │
+        ▼
+Tests + Terraform Plan
+        │
+        ▼
+ CI Successful
+```
+
+Azure DevOps run:
+
+```text
+#20261001.11
+```
+
+completed successfully.
 
 ---
 
@@ -375,17 +412,23 @@ Terraform Apply
 Post-Deployment Smoke Validation
 ```
 
+This confirms that the saved Terraform plan can be promoted through the controlled deployment workflow and applied only after the production environment approval check.
+
+The CD pipeline is intentionally separate from the automatic CI trigger. A successful CI run does not automatically execute Terraform Apply.
+
 ---
 
 ## 13. Final Git Validation
 
-The final Git validation command was:
+The repository was validated after the final documentation and CI/CD updates.
+
+The final validation command is:
 
 ```bash
 git status
 ```
 
-Expected result:
+The expected clean state is:
 
 ```text
 On branch main
@@ -394,13 +437,13 @@ Your branch is up to date with 'origin/main'.
 nothing to commit, working tree clean
 ```
 
-Final HEAD:
+The authoritative branch for the completed project is:
 
 ```text
-654eff1
+main
 ```
 
-Remote:
+with the corresponding remote branch:
 
 ```text
 origin/main
@@ -408,29 +451,50 @@ origin/main
 
 ---
 
-## 14. GitHub Trigger Follow-Up
+## 14. GitHub Push Trigger Validation
 
-The Azure DevOps CI pipeline itself is functional and has successfully run against `main`.
+The GitHub-to-Azure DevOps CI trigger was initially investigated during the Day 9–10 implementation.
 
-The remaining issue is the automatic GitHub push trigger.
+The final integration was subsequently validated by pushing directly from the terminal:
 
-Observed behaviour:
-
-```text
-Manual CI run
-      |
-      v
-Successful
-
-GitHub push
-      |
-      v
-Automatic CI trigger does not start
+```bash
+git push origin main
 ```
 
-This should be investigated separately as a GitHub-to-Azure DevOps integration configuration issue.
+The push automatically triggered the Azure DevOps CI pipeline.
 
-It does not change the successful validation of the CI pipeline through manual execution.
+The verified behavior is:
+
+```text
+GitHub push to main
+        │
+        ▼
+Azure DevOps CI trigger
+        │
+        ▼
+Default Agent Pool
+        │
+        ▼
+bello-cloudshell
+        │
+        ▼
+CI execution
+        │
+        ▼
+  Successful
+```
+
+Azure DevOps run:
+
+```text
+#20261001.11
+```
+
+completed successfully.
+
+Therefore, the GitHub push trigger is considered validated.
+
+The CD pipeline remains intentionally separate and is **not automatically triggered by the CI pipeline**.
 
 ---
 
@@ -455,7 +519,7 @@ It does not change the successful validation of the CI pipeline through manual e
 | Final CI validation             | Complete                     |
 | Final CD validation             | Complete                     |
 | Git working tree clean          | Complete                     |
-| Automatic GitHub push trigger   | Follow-up configuration item |
+| Automatic GitHub push trigger   | Complete                     |
 
 ---
 
