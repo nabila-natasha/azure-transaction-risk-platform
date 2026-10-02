@@ -225,7 +225,7 @@ The resulting processing model is:
 Raw / Bronze Data
        |
        v
-Validation
+  Validation
        |
    +---+---+
    |       |
@@ -321,7 +321,7 @@ Python Source
 Syntax Validation
      |
      v
-pytest
+   pytest
      |
      +--> Data Quality Tests
      |
@@ -393,7 +393,7 @@ The verified execution path was:
 git push origin main
         |
         v
-GitHub
+      GitHub
         |
         v
 Azure DevOps CI
@@ -402,13 +402,13 @@ Azure DevOps CI
 Default Agent Pool
         |
         v
-bello-cloudshell
+ bello-cloudshell
         |
         v
 Python Tests + Terraform Plan
         |
         v
-CI Successful
+  CI Successful
 ```
 
 Azure DevOps run:
