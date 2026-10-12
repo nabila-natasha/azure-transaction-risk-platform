@@ -18,6 +18,8 @@ FILESYSTEM = "synapse"
 SILVER_ROOT = "silver/transactions"
 GOLD_ROOT = "gold/ml/scored_transactions"
 ARTIFACT_DIR = Path("artifacts/ml/xgboost")
+MODEL_ARTIFACT_ROOT = "gold/ml/artifacts/xgboost"
+MODEL_RUN_ID = "20261012T024013Z"
 
 MODEL_THRESHOLD = 0.50
 MODEL_VERSION = "xgboost-v1"
@@ -191,17 +193,51 @@ def engineer_features(df):
     return df, features
 
 
-def load_saved_model(features):
-    manifest_path = ARTIFACT_DIR / "manifest.json"
-    model_path = ARTIFACT_DIR / "model.json"
+def load_saved_model(features, filesystem=None):
+    # Production scoring loads a pinned, versioned model from ADLS.
+    # Local loading remains available for existing unit tests.
+    if filesystem is not None:
+        artifact_path = (
+            f"{MODEL_ARTIFACT_ROOT}/{MODEL_RUN_ID}"
+        )
 
-    if not manifest_path.is_file():
-        raise FileNotFoundError(f"Missing model manifest: {manifest_path}")
-    if not model_path.is_file():
-        raise FileNotFoundError(f"Missing saved model: {model_path}")
+        manifest_data = (
+            filesystem
+            .get_file_client(f"{artifact_path}/manifest.json")
+            .download_file()
+            .readall()
+        )
+        model_data = (
+            filesystem
+            .get_file_client(f"{artifact_path}/model.json")
+            .download_file()
+            .readall()
+        )
 
-    with manifest_path.open(encoding="utf-8") as file:
-        manifest = json.load(file)
+        manifest = json.loads(manifest_data)
+
+        if manifest.get("run_id") != MODEL_RUN_ID:
+            raise ValueError(
+                f"Model run ID mismatch: expected {MODEL_RUN_ID}, "
+                f"got {manifest.get('run_id')}"
+            )
+    else:
+        manifest_path = ARTIFACT_DIR / "manifest.json"
+        model_path = ARTIFACT_DIR / "model.json"
+
+        if not manifest_path.is_file():
+            raise FileNotFoundError(
+                f"Missing model manifest: {manifest_path}"
+            )
+        if not model_path.is_file():
+            raise FileNotFoundError(
+                f"Missing saved model: {model_path}"
+            )
+
+        with manifest_path.open(encoding="utf-8") as file:
+            manifest = json.load(file)
+
+        model_data = model_path.read_bytes()
 
     if manifest.get("features") != features:
         raise ValueError(
@@ -210,7 +246,7 @@ def load_saved_model(features):
         )
 
     model = XGBClassifier()
-    model.load_model(str(model_path))
+    model.load_model(bytearray(model_data))
 
     saved_features = model.get_booster().feature_names
     if saved_features is not None and saved_features != features:
@@ -218,7 +254,12 @@ def load_saved_model(features):
             f"Saved model feature names differ: {saved_features}"
         )
 
-    print(f"Loaded saved model: {model_path}")
+    source_label = (
+        f"ADLS: {MODEL_ARTIFACT_ROOT}/{MODEL_RUN_ID}/model.json"
+        if filesystem is not None
+        else str(ARTIFACT_DIR / "model.json")
+    )
+    print(f"Loaded saved model: {source_label}")
     print(f"Model run ID: {manifest.get('run_id')}")
     print(f"Validated feature count: {len(features)}")
 
@@ -246,7 +287,7 @@ def main():
     print("\nEngineering evaluation features...")
     evaluation, features = engineer_features(evaluation)
 
-    model = load_saved_model(features)
+    model = load_saved_model(features, filesystem=filesystem)
 
     # Score
     # --------------------------------------------------------------
