@@ -250,3 +250,6 @@ __marimo__/
 **/terraform.tfstate.*
 **/crash.log
 **/crash.*.log
+
+# Generated local XGBoost model artifacts
+/artifacts/ml/xgboost/
