@@ -1,6 +1,10 @@
 from azure.identity import DefaultAzureCredential
 from azure.storage.filedatalake import DataLakeServiceClient
 import pyarrow.parquet as pq
+import argparse
+import json
+from pathlib import Path
+
 import pyarrow as pa
 import pandas as pd
 import numpy as np
@@ -13,6 +17,7 @@ FILESYSTEM = "synapse"
 
 SILVER_ROOT = "silver/transactions"
 GOLD_ROOT = "gold/ml/scored_transactions"
+ARTIFACT_DIR = Path("artifacts/ml/xgboost")
 
 MODEL_THRESHOLD = 0.50
 MODEL_VERSION = "xgboost-v1"
@@ -155,6 +160,8 @@ def engineer_features(df):
         * np.sin(dlon / 2) ** 2
     )
 
+    a = np.clip(a, 0, 1)
+
     df["distance_km"] = (
         6371
         * 2
@@ -184,103 +191,63 @@ def engineer_features(df):
     return df, features
 
 
-def train_model(train, features):
+def load_saved_model(features):
+    manifest_path = ARTIFACT_DIR / "manifest.json"
+    model_path = ARTIFACT_DIR / "model.json"
 
-    X_train = train[features]
-    y_train = train["is_fraud"]
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"Missing model manifest: {manifest_path}")
+    if not model_path.is_file():
+        raise FileNotFoundError(f"Missing saved model: {model_path}")
 
-    fraud = y_train.sum()
-    non_fraud = len(y_train) - fraud
+    with manifest_path.open(encoding="utf-8") as file:
+        manifest = json.load(file)
 
-    scale_pos_weight = (
-        non_fraud / fraud
-    )
+    if manifest.get("features") != features:
+        raise ValueError(
+            "Feature contract mismatch. "
+            f"Manifest: {manifest.get('features')}; scoring: {features}"
+        )
 
-    model = XGBClassifier(
-        n_estimators=300,
-        max_depth=6,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        objective="binary:logistic",
-        eval_metric="aucpr",
-        scale_pos_weight=scale_pos_weight,
-        random_state=42,
-        n_jobs=-1,
-    )
+    model = XGBClassifier()
+    model.load_model(str(model_path))
 
-    model.fit(
-        X_train,
-        y_train,
-    )
+    saved_features = model.get_booster().feature_names
+    if saved_features is not None and saved_features != features:
+        raise ValueError(
+            f"Saved model feature names differ: {saved_features}"
+        )
+
+    print(f"Loaded saved model: {model_path}")
+    print(f"Model run ID: {manifest.get('run_id')}")
+    print(f"Validated feature count: {len(features)}")
 
     return model
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description="Score streaming transactions with the saved XGBoost model."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate scoring output without writing to Gold.",
+    )
+    args = parser.parse_args()
 
     filesystem = get_filesystem()
 
-    print("Loading batch training data...")
-
-    train = load_source(
-        filesystem,
-        "batch",
-    )
-
     print("Loading streaming evaluation data...")
+    evaluation = load_source(filesystem, "streaming")
 
-    evaluation = load_source(
-        filesystem,
-        "streaming",
-    )
+    print(f"Scoring rows: {len(evaluation):,}")
 
-    print(
-        f"Training rows:   {len(train):,}"
-    )
+    print("\nEngineering evaluation features...")
+    evaluation, features = engineer_features(evaluation)
 
-    print(
-        f"Scoring rows:     {len(evaluation):,}"
-    )
+    model = load_saved_model(features)
 
-    # --------------------------------------------------------------
-    # Feature engineering
-    # --------------------------------------------------------------
-
-    print(
-        "\nEngineering training features..."
-    )
-
-    train, features = engineer_features(
-        train
-    )
-
-    print(
-        "Engineering evaluation features..."
-    )
-
-    evaluation, _ = engineer_features(
-        evaluation
-    )
-
-    # --------------------------------------------------------------
-    # Train
-    # --------------------------------------------------------------
-
-    print(
-        "Training XGBoost model..."
-    )
-
-    model = train_model(
-        train,
-        features,
-    )
-
-    print(
-        "Training complete."
-    )
-
-    # --------------------------------------------------------------
     # Score
     # --------------------------------------------------------------
 
@@ -383,46 +350,45 @@ def main():
     ].copy()
 
     # --------------------------------------------------------------
-    # Write directly to ADLS Gold
-    # --------------------------------------------------------------
+    # Validate output contract before any write
+    if len(output.columns) != 32:
+        raise ValueError(
+            f"Expected 32 Gold columns, got {len(output.columns)}"
+        )
 
-    output_path = (
-        f"{GOLD_ROOT}/scored_transactions.parquet"
-    )
+    if output.columns.duplicated().any():
+        raise ValueError("Duplicate columns found in scoring output.")
 
-    print(
-        "\nWriting scored transactions..."
-    )
+    probabilities_check = output["fraud_probability"].to_numpy(dtype=float)
 
-    table = pa.Table.from_pandas(
-        output,
-        preserve_index=False,
-    )
+    if not np.isfinite(probabilities_check).all():
+        raise ValueError("Fraud probabilities contain non-finite values.")
 
-    buffer = pa.BufferOutputStream()
+    if not output["fraud_probability"].between(0, 1).all():
+        raise ValueError("Fraud probabilities fall outside [0, 1].")
 
-    pq.write_table(
-        table,
-        buffer,
-        compression="snappy",
-    )
+    if args.dry_run:
+        print("\nDRY RUN: Gold was NOT modified.")
+        print(f"Would write: {GOLD_ROOT}/scored_transactions.parquet")
+    else:
+        output_path = f"{GOLD_ROOT}/scored_transactions.parquet"
 
-    filesystem.get_file_client(
-        output_path
-    ).upload_data(
-        buffer.getvalue().to_pybytes(),
-        overwrite=True,
-    )
+        print("\nWriting scored transactions...")
+        table = pa.Table.from_pandas(output, preserve_index=False)
+        buffer = pa.BufferOutputStream()
+        pq.write_table(table, buffer, compression="snappy")
 
-    print(
-        f"Written successfully: {output_path}"
-    )
+        filesystem.get_file_client(output_path).upload_data(
+            buffer.getvalue().to_pybytes(),
+            overwrite=True,
+        )
 
-    print(
-        f"\nOutput rows: {len(output):,}"
-    )
+        print(f"Written successfully: {output_path}")
+
+    print(f"\nOutput rows: {len(output):,}")
 
     # --------------------------------------------------------------
+
     # Verification
     # --------------------------------------------------------------
 
