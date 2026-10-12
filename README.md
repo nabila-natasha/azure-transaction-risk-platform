@@ -273,6 +273,8 @@ The feature contract is explicitly tested so that changes to the upstream data s
 
 ## 8. Machine Learning
 
+For the detailed rationale behind model versioning, the four ADLS artifacts, scoring-script changes, contract tests, dry-run validation, and read-only Gold parity checks, see [Model Versioning and Scoring Engineering Notes](docs/engineering/model-versioning-and-scoring.md).
+
 The project prepares a Silver-derived dataset for machine learning.
 
 The ML workflow separates:
