@@ -1,0 +1,11 @@
+# Runtime for the online scoring API. Versions below are the ones the tests
+# were run with (Python 3.13). If your Cloud Shell Python / existing
+# requirements.txt differ, keep xgboost, pandas, numpy and scikit-learn
+# aligned with requirements.txt and re-run the tests.
+fastapi==0.143.0
+uvicorn==0.53.0
+pydantic==2.13.5
+numpy==2.5.3
+pandas==3.0.6
+xgboost==3.4.1
+scikit-learn==1.9.1
