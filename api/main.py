@@ -10,12 +10,13 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 from datetime import datetime, timedelta
 
 import pandas as pd
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.model_store import Settings, load_bundle
@@ -129,6 +130,11 @@ def create_app(settings=None, bundle=None):
     def require_key(x_api_key: str = Header(default="")):
         if not secrets.compare_digest(x_api_key.encode(), settings.api_key.encode()):
             raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def home():
+        page = Path(__file__).parent / "static" / "index.html"
+        return HTMLResponse(page.read_text(encoding="utf-8"))
 
     @app.get("/health")
     def health():

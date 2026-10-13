@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transaction Risk Checker</title>
+  <style>
+    :root {
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #182230;
+      background: #f4f7fb;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header {
+      background: #13233f;
+      color: white;
+      padding: 25px 20px;
+    }
+    header .inner, main { max-width: 1000px; margin: auto; }
+    header h1 { margin: 0 0 6px; font-size: 25px; }
+    header p { margin: 0; color: #d5dfef; }
+    main {
+      padding: 26px 18px 45px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+    }
+    .card {
+      background: white;
+      border: 1px solid #e0e6ef;
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: 0 3px 12px #162b4d0a;
+    }
+    h2 { margin: 0 0 8px; font-size: 19px; }
+    .intro, .hint { color: #667085; font-size: 13px; line-height: 1.5; }
+    .intro { margin: 0 0 20px; }
+    .section-label {
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: .07em;
+      color: #53657d;
+      text-transform: uppercase;
+      margin: 22px 0 12px;
+    }
+    .field { margin-bottom: 14px; }
+    .two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 650;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      min-width: 0;
+      padding: 11px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 14px;
+      background: white;
+    }
+    input:focus {
+      outline: 2px solid #9abaff;
+      border-color: #356fce;
+    }
+    .hint { display: block; margin-top: 5px; }
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 9px;
+      padding: 13px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      background: #245fbd;
+      color: white;
+      margin-top: 4px;
+    }
+    button:hover { background: #174b9b; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .secondary {
+      background: #edf3fc;
+      color: #214f8e;
+      margin-top: 10px;
+    }
+    .secondary:hover { background: #dfeafb; }
+    .result-placeholder {
+      min-height: 250px;
+      display: grid;
+      place-content: center;
+      text-align: center;
+      color: #718096;
+      line-height: 1.6;
+    }
+    .result { display: none; }
+    .status {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 20px;
+      background: #e3f7eb;
+      color: #17683a;
+      font-size: 12px;
+      font-weight: 750;
+      margin-bottom: 16px;
+    }
+    .eyebrow { color: #667085; font-size: 13px; }
+    .probability {
+      font-size: clamp(42px, 6vw, 60px);
+      font-weight: 800;
+      letter-spacing: -2px;
+      margin: 4px 0;
+    }
+    .subtext { color: #667085; font-size: 14px; }
+    .meter {
+      height: 9px;
+      background: #e8edf4;
+      border-radius: 20px;
+      overflow: hidden;
+      margin: 17px 0 7px;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0;
+      background: #3975ca;
+      transition: width .3s;
+    }
+    .meter-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #667085;
+    }
+    .decision {
+      padding: 15px;
+      border-radius: 10px;
+      background: #f3f6fa;
+      margin: 20px 0 14px;
+    }
+    .decision strong { display: block; font-size: 17px; margin-bottom: 5px; }
+    .risk {
+      display: inline-block;
+      border-radius: 6px;
+      padding: 5px 9px;
+      background: #fff0cf;
+      color: #875600;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .details {
+      border-top: 1px solid #e7ebf1;
+      padding-top: 13px;
+      margin-top: 14px;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #536174;
+      overflow-wrap: anywhere;
+    }
+    .notice {
+      display: none;
+      border-radius: 8px;
+      padding: 11px;
+      margin-top: 14px;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .error { display: block; color: #9b2525; background: #fff0f0; }
+    .caution {
+      font-size: 12px;
+      color: #667085;
+      line-height: 1.6;
+      margin: 17px 0 0;
+    }
+    @media (max-width: 720px) {
+      main { grid-template-columns: 1fr; padding: 16px 12px 30px; }
+      header { padding: 20px 16px; }
+      .card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <h1>Transaction Risk Checker</h1>
+    <p>Score a transaction using the pinned XGBoost fraud model.</p>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Transaction details</h2>
+    <p class="intro">Enter the transaction and customer details below. Fields marked with an example show the expected format.</p>
+
+    <form id="prediction-form">
+      <div class="field">
+        <label for="api-key">API key</label>
+        <input id="api-key" type="password" autocomplete="off"
+               placeholder="Enter your API key" required>
+        <span class="hint">Used for this request only. This page does not save it.</span>
+      </div>
+
+      <div class="section-label">Transaction</div>
+      <div class="two">
+        <div class="field">
+          <label for="event-date">Transaction date</label>
+          <input id="event-date" type="date" required>
+        </div>
+        <div class="field">
+          <label for="event-time">Transaction time</label>
+          <input id="event-time" type="time" required>
+        </div>
+      </div>
+      <div class="field">
+        <label for="amt">Transaction amount</label>
+        <input id="amt" type="number" min="0" max="1000000"
+               step="0.01" placeholder="e.g. 125.50" required>
+      </div>
+
+      <div class="section-label">Customer</div>
+      <div class="field">
+        <label for="dob">Date of birth</label>
+        <input id="dob" type="date" required>
+        <span class="hint">Select the date only. No birth time is needed.</span>
+      </div>
+      <div class="field">
+        <label for="city-pop">City population</label>
+        <input id="city-pop" type="number" min="0" max="100000000"
+               step="1" placeholder="e.g. 20000" required>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="lat">Customer latitude</label>
+          <input id="lat" type="number" min="-90" max="90" step="any"
+                 placeholder="e.g. 48.8878" required>
+        </div>
+        <div class="field">
+          <label for="long">Customer longitude</label>
+          <input id="long" type="number" min="-180" max="180" step="any"
+                 placeholder="e.g. -100.9893" required>
+        </div>
+        <div class="field">
+          <label for="merch-lat">Merchant latitude</label>
+          <input id="merch-lat" type="number" min="-90" max="90" step="any"
+                 placeholder="e.g. 40.3518" required>
+        </div>
+        <div class="field">
+          <label for="merch-long">Merchant longitude</label>
+          <input id="merch-long" type="number" min="-180" max="180" step="any"
+                 placeholder="e.g. -122.2303" required>
+        </div>
+      </div>
+
+      <button id="submit-button" type="submit">Score transaction</button>
+      <button class="secondary" id="sample-button" type="button">Load illustrative sample</button>
+      <div id="form-message" class="notice" role="alert"></div>
+    </form>
+    <p class="caution">Use authorised, appropriate data only. A model score is an estimate, not proof of fraud or safety.</p>
+  </section>
+
+  <section class="card" aria-live="polite">
+    <div id="empty-result" class="result-placeholder">
+      <div>
+        <h2>Prediction result</h2>
+        Complete the form and select <strong>Score transaction</strong>.<br>
+        Your model's response will appear here.
+      </div>
+    </div>
+
+    <div id="result" class="result">
+      <span class="status">Successful prediction</span>
+      <div class="eyebrow">Illustrative transaction · <span id="model-version"></span></div>
+      <div class="probability" id="probability">—</div>
+      <div class="subtext">fraud probability</div>
+      <div class="meter"><div class="meter-fill" id="meter-fill"></div></div>
+      <div class="meter-labels"><span>0%</span><span>Decision threshold: <span id="threshold-label">50%</span></span><span>100%</span></div>
+
+      <div class="decision">
+        <strong id="prediction-label">Prediction</strong>
+        <span class="risk" id="risk-band">Risk band</span>
+      </div>
+      <p id="explanation" class="subtext"></p>
+      <div class="details">
+        <div>Model run: <strong id="model-run"></strong></div>
+        <div>Request ID: <span id="request-id"></span></div>
+      </div>
+      <button class="secondary" id="reset-result" type="button">Clear result</button>
+    </div>
+    <div id="result-message" class="notice" role="alert"></div>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const form = $("prediction-form");
+
+  // Use the browser's local date/time, avoiding UTC date shifts.
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  $("event-date").value = today;
+  $("event-time").value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  function showMessage(id, message) {
+    const el = $(id);
+    el.textContent = message;
+    el.className = "notice error";
+  }
+  function clearMessage(id) {
+    const el = $(id);
+    el.textContent = "";
+    el.className = "notice";
+  }
+
+  $("sample-button").addEventListener("click", () => {
+    $("event-date").value = today;
+    $("event-time").value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+    $("dob").value = "1994-02-26";
+    $("amt").value = "5000";
+    $("city-pop").value = "20000";
+    $("lat").value = "48.8878";
+    $("long").value = "-100.9893";
+    $("merch-lat").value = "40.351813";
+    $("merch-long").value = "-122.230347";
+    clearMessage("form-message");
+    clearMessage("result-message");
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearMessage("form-message");
+    clearMessage("result-message");
+
+    const key = $("api-key").value.trim();
+    const date = $("event-date").value;
+    const time = $("event-time").value;
+    const dob = $("dob").value;
+
+    if (!key || !date || !time || !dob) {
+      showMessage("form-message", "Please complete the API key, transaction date/time, and date of birth.");
+      return;
+    }
+    if (`${dob}T00:00:00` >= `${date}T${time}:00`) {
+      showMessage("form-message", "Date of birth must be earlier than the transaction date and time.");
+      return;
+    }
+
+    const payload = {
+      event_time: `${date}T${time}:00`,
+      dob: `${dob}T00:00:00`,
+      amt: Number($("amt").value),
+      city_pop: Number($("city-pop").value),
+      lat: Number($("lat").value),
+      long: Number($("long").value),
+      merch_lat: Number($("merch-lat").value),
+      merch_long: Number($("merch-long").value)
+    };
+
+    const button = $("submit-button");
+    button.disabled = true;
+    button.textContent = "Scoring transaction…";
+
+    try {
+      const response = await fetch(new URL("predict", window.location.href), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": key
+        },
+        body: JSON.stringify(payload)
+      });
+      const body = await response.json();
+
+      if (!response.ok) {
+        const detail = Array.isArray(body.detail)
+          ? body.detail.map(e => `${(e.loc || []).slice(1).join(".")}: ${e.msg}`).join("; ")
+          : (body.detail || `Request failed (${response.status})`);
+        throw new Error(response.status === 401
+          ? "Authentication failed. Check the API key and try again."
+          : detail);
+      }
+
+      const pct = body.fraud_probability * 100;
+      const thresholdPct = body.threshold * 100;
+      $("empty-result").style.display = "none";
+      $("result").style.display = "block";
+      $("probability").textContent = `${pct.toFixed(2)}%`;
+      $("meter-fill").style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      $("threshold-label").textContent = `${thresholdPct.toFixed(0)}%`;
+      $("prediction-label").textContent = body.predicted_fraud === 1
+        ? "Predicted fraud: Yes"
+        : "Predicted fraud: No";
+      $("risk-band").textContent = `${body.risk_band} risk`;
+      $("model-version").textContent = body.model_version;
+      $("model-run").textContent = body.model_run_id;
+      $("request-id").textContent = body.request_id;
+      $("explanation").textContent =
+        `Because ${(pct).toFixed(2)}% is ${body.predicted_fraud === 1 ? "at or above" : "below"} the ${thresholdPct.toFixed(0)}% threshold, the model returned predicted_fraud: ${body.predicted_fraud}. This is a model estimate, not proof that the transaction is fraudulent or safe.`;
+    } catch (error) {
+      showMessage("result-message", error.message || "Unable to contact the scoring API.");
+    } finally {
+      button.disabled = false;
+      button.textContent = "Score transaction";
+    }
+  });
+
+  $("reset-result").addEventListener("click", () => {
+    $("result").style.display = "none";
+    $("empty-result").style.display = "grid";
+    clearMessage("result-message");
+  });
+</script>
+</body>
+</html>
