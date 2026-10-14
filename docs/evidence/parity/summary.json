@@ -1,0 +1,53 @@
+{
+  "created_at_utc": "2026-10-14T03:07:47.553185+00:00",
+  "silver_root": "silver/transactions/streaming",
+  "gold_path": "gold/ml/scored_transactions/scored_transactions.parquet",
+  "silver_parquet_files": 5,
+  "silver_rows": 139538,
+  "gold_rows": 139538,
+  "matched_event_ids": 139538,
+  "unmatched_silver_ids": 0,
+  "sample_size_requested": 1000,
+  "sample_size_tested": 1000,
+  "api_base_url": "http://localhost:8000",
+  "expected_api_model_run_id": "20261012T024013Z",
+  "api_model_info": {
+    "model_version": "xgboost-v1",
+    "model_run_id": "20261012T024013Z",
+    "features": [
+      "amt",
+      "city_pop",
+      "lat",
+      "long",
+      "merch_lat",
+      "merch_long",
+      "transaction_hour",
+      "day_of_week",
+      "month",
+      "customer_age",
+      "distance_km"
+    ],
+    "threshold": 0.5
+  },
+  "gold_model_versions": [
+    "xgboost-v1"
+  ],
+  "gold_thresholds": [
+    0.5
+  ],
+  "probability_tolerance": 1e-06,
+  "checks": {
+    "probability_match": 1000,
+    "class_match": 1000,
+    "risk_band_match": 1000,
+    "model_version_match": 1000,
+    "run_id_match": 1000,
+    "threshold_match": 1000
+  },
+  "request_errors": 0,
+  "mismatch_rows": 0,
+  "overall_pass": true,
+  "note": "Gold does not contain model_run_id. The API run ID is checked against EXPECTED_MODEL_RUN_ID, but the exact Gold training run cannot be proven from Gold model_version alone.",
+  "details_file": "docs/evidence/parity/details.csv",
+  "mismatches_file": "docs/evidence/parity/mismatches.csv"
+}
