@@ -1012,6 +1012,21 @@ End-to-end model inference has been validated locally, but
 inference inside the Docker container has not yet been validated.
 A secure runtime model-delivery mechanism is still required.
 
+
+### Docker Runtime Validation
+- GitHub Actions successfully builds the Docker image.
+- Container smoke tests confirm API imports and web-interface availability.
+- A temporary synthetic model was mounted into the container.
+- Container startup and model loading succeeded with the test model.
+- Health, authentication, model metadata, and prediction endpoint checks passed.
+- The container returned a valid prediction response.
+- The trained XGBoost model remains outside the public repository.
+
+### Remaining Work
+- Validate inference inside Docker using the actual saved XGBoost model.
+- Implement secure runtime delivery of the trained model.
+- Decide on a hosting platform before claiming production deployment.
+
 ---
 
 ## 25. Evidence
