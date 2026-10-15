@@ -77,21 +77,28 @@ The project demonstrates the following data engineering, cloud engineering, ML e
 
 ## 3. Technology Stack
 
-| Area                    | Technology                                       |
-| ----------------------- | ------------------------------------------------ |
-| Cloud                   | Microsoft Azure                                  |
-| Infrastructure as Code  | Terraform                                        |
-| Storage                 | Azure Data Lake Storage / Azure Storage          |
-| Streaming / Ingestion   | Azure Event Hubs                                 |
-| Data Processing         | Python, Pandas, PyArrow                          |
-| Machine Learning        | Python / scikit-learn workflow                   |
-| Testing                 | pytest                                           |
-| CI/CD                   | Azure DevOps Pipelines                           |
-| Source Control          | Git / GitHub                                     |
-| Authentication          | Azure DevOps service connection / Azure identity |
-| Environment Approval    | Azure DevOps Environment                         |
-| Data Format             | Parquet                                          |
-| Development Environment | Azure Cloud Shell                                |
+| Area                    | Technology                                                |
+| ----------------------- | --------------------------------------------------------- |
+| Cloud                   | Microsoft Azure                                           |
+| Infrastructure as Code  | Terraform                                                 |
+| Storage                 | Azure Data Lake Storage / Azure Storage                   |
+| Streaming / Ingestion   | Azure Event Hubs                                          |
+| Data Processing         | Python, Pandas, PyArrow                                   |
+| Machine Learning        | Python / scikit-learn workflow                            |
+| Testing                 | pytest                                                    |
+| CI/CD                   | Azure DevOps Pipelines                                    |
+| Source Control          | Git / GitHub                                              |
+| Authentication          | Azure DevOps service connection / Azure identity          |
+| Environment Approval    | Azure DevOps Environment                                  |
+| Data Format             | Parquet                                                   |
+| Development Environment | Azure Cloud Shell                                         |
+| API Framework           | FastAPI                                                   |
+| API Server              | Uvicorn                                                   |
+| Model Serving           | Saved XGBoost model and versioned model artifacts         |
+| Model Artifact Storage  | Azure Data Lake Storage / configurable local model bundle |
+| API Documentation       | OpenAPI / Swagger UI                                      |
+| Browser Interface       | HTML / JavaScript web application                         |
+| API Testing             | pytest, FastAPI TestClient, and prediction contract tests |
 
 ---
 
@@ -133,6 +140,44 @@ The platform separates infrastructure provisioning, ingestion, data processing, 
                            v
                     ML Validation
 ```
+
+### ML Scoring and API Architecture
+
+```text
+Silver Transaction Data
+          |
+          v
+   Feature Engineering
+          |
+          v
+  Saved Model Artifacts
+  + Model Manifest
+          |
+          v
+   FastAPI Scoring API
+          |
+     +----+----+
+     |         |
+     v         v
+  Web App   API Clients
+     |         |
+     +----+----+
+          |
+          v
+  Prediction Response
+  - Fraud Probability
+  - Predicted Class
+  - Risk Band
+  - Model Version
+  - Model Run ID
+```
+
+The API loads a saved model bundle rather than retraining the model for each request. 
+It derives the required features from the submitted transaction, applies the configured
+scoring threshold, and returns a structured prediction response.
+
+The browser interface provides a user-friendly way to submit a transaction to the API 
+and inspect its prediction.
 
 ### Deployment Architecture
 
@@ -273,7 +318,8 @@ The feature contract is explicitly tested so that changes to the upstream data s
 
 ## 8. Machine Learning
 
-For the detailed rationale behind model versioning, the four ADLS artifacts, scoring-script changes, contract tests, dry-run validation, and read-only Gold parity checks, see [Model Versioning and Scoring Engineering Notes](docs/engineering/model-versioning-and-scoring.md).
+For the detailed rationale behind model versioning, the four ADLS artifacts, scoring-script changes, contract tests, dry-run validation, 
+and read-only Gold parity checks, see [Model Versioning and Scoring Engineering Notes](docs/engineering/model-versioning-and-scoring.md).
 
 The project prepares a Silver-derived dataset for machine learning.
 
@@ -285,9 +331,46 @@ The ML workflow separates:
 4. Model-input validation
 5. Model smoke testing
 
-The objective is to demonstrate the engineering lifecycle surrounding an ML workload rather than claim production fraud-detection performance.
+The objective is to demonstrate the engineering lifecycle surrounding an ML workload rather than claim 
+production fraud-detection performance.
 
-Model results should therefore be interpreted as portfolio and engineering validation rather than as a production financial-risk model.
+Model results should therefore be interpreted as portfolio and engineering validation rather than 
+as a production financial-risk model.
+
+### Model Artifacts and Versioning
+
+The project separates model training and validation from online scoring. A saved model bundle 
+and its manifest allow the scoring API to load a specific model run without retraining during an API request.
+
+The model metadata identifies the model version, model run, expected features, and scoring configuration. 
+This supports reproducibility and traceability when investigating individual predictions.
+
+The API uses the existing XGBoost scoring implementation and configured threshold. It does not require 
+changes to the existing Gold dataset to serve predictions.
+
+### API and Browser-Based Scoring
+
+The FastAPI application exposes:
+
+| Endpoint | Purpose |
+|---|---|
+| `/health` | Basic API health check |
+| `/model-info` | Returns model metadata; requires an API key |
+| `/predict` | Validates and scores a transaction; requires an API key |
+| `/docs` | Interactive Swagger UI documentation |
+| `/openapi.json` | OpenAPI specification |
+
+The prediction response includes the fraud probability, predicted class, risk band, model version, 
+model run ID, threshold, and request ID.
+
+A browser-based web application provides an interface for submitting transactions to the scoring API. 
+Input validation, API authentication, structured error responses, and request logging support a more controlled scoring workflow.
+
+The Swagger UI is configured to use a relative OpenAPI URL so that the documentation also renders correctly 
+through Azure Cloud Shell Web Preview.
+
+**Deployment scope:** The API and web interface have been exercised in local development and Azure Cloud Shell. 
+This demonstrates the scoring workflow but does not represent a continuously running production API deployment.
 
 ---
 
@@ -300,11 +383,20 @@ The repository contains automated tests covering:
 * Data quality
 * Model smoke validation
 
-The test suite was successfully executed with:
+The latest recorded automated test run completed with:
 
 ```text
-16 passed
+43 passed, 1 warning
 ```
+
+The suite covers data quality, feature engineering, ML feature contracts, model scoring,
+API request validation, prediction response contracts, and related scoring behaviour.
+
+The warning concerns a Starlette deprecation notice involving `httpx` and `starlette.testclient`; 
+it did not cause test failures.
+
+The API was also checked through its health endpoint, model-information endpoint, 
+prediction endpoint, and interactive documentation during development.
 
 Python syntax validation is also performed using:
 
@@ -706,24 +798,30 @@ A simplified repository structure is:
 ```text
 azure-transaction-risk-platform/
 │
+├── api/
+│   ├── main.py
+│   └── static/
+│       └── index.html
 ├── .gitignore
 ├── README.md
 ├── azure-pipelines-ci.yml
 ├── azure-pipelines-cd.yml
 ├── pytest.ini
 ├── requirements.txt
+├── requirements-api-test.txt
+├── requirements-api.txt
 │
 ├── data/
 │   └── fixtures/
 │
 ├── docs/
-│   ├── notes/
-│   │   └── ...
-│   ├── evidence/
-│   │   └── ...
-│   ├── rollback.md
-│   ├── day11-production-readiness.md
-│   └── project-completion.md
+│   ├── engineering/
+│   │   ├── model-versioning-and-scoring.md
+│   │   ├── api-prediction-parity-validation.md
+│   │   └── api-local-and-cloud-shell-runbook.md
+│   └── evidence/
+│   |   └── demo/
+│   └── ...
 │
 ├── infra/
 │   └── terraform/
@@ -740,7 +838,6 @@ azure-transaction-risk-platform/
 │   │   └── consumer.py
 │   └── processing/
 │       └── bronze_to_silver.py
-│
 ├── sql/
 │   └── serving/
 │       └── 01_create_serving_layer.sql
@@ -749,12 +846,14 @@ azure-transaction-risk-platform/
 │   ├── __init__.py
 │   └── ...
 │
+├── src/
+│   ├── model_store.py
+│   ├── scoring.py
+│   └── features.py
+|
 ├── tests/
 │   ├── fixtures/
-│   ├── test_data_quality.py
-│   ├── test_feature_engineering.py
-│   ├── test_ml_contract.py
-│   └── test_model_smoke.py
+│   └── ...
 │
 └── sandbox-day1/
     └── ...
@@ -832,6 +931,8 @@ A concise explanation of the project:
 
 > I built an Azure transaction-risk data platform that takes transaction data through ingestion, Bronze and Silver data layers, data-quality validation, feature engineering, and ML preparation. I provisioned the Azure infrastructure with Terraform and implemented Azure DevOps CI/CD with automated Python tests, Terraform planning and deployment, production approval, Terraform plan artifact promotion, and post-deployment smoke validation. A direct GitHub push to `main` automatically triggers the CI pipeline on a self-hosted Azure DevOps agent running in Azure Cloud Shell, while CD remains a separate controlled deployment workflow. I also documented a controlled rollback process.
 
+> I also extended the project with a saved-model scoring API and a browser-based transaction interface. The FastAPI service loads versioned model artifacts, validates incoming transactions, derives the required features, and returns prediction results with model metadata. I added API contract tests and documented the local and Cloud Shell execution workflows. The latest recorded automated test run passed all 43 tests. The API demonstration validates the scoring workflow without claiming a persistent production deployment or real-world fraud-detection accuracy.
+
 ---
 
 ## 23. Project Status
@@ -873,6 +974,16 @@ and:
 Controlled CD Deployment
 ```
 
+### API and ML Serving Scope
+
+The model-artifact, API-scoring, browser-interface, and API-testing workflows have been 
+validated during development. The latest recorded test run passed 43 tests.
+
+The API demonstration runs in local development and Azure Cloud Shell. It should be 
+distinguished from the separately validated Terraform infrastructure deployment workflow: a 
+successful infrastructure CD run does not, by itself, mean the scoring API is deployed as 
+a persistent production service.
+
 ---
 
 ## 24. Evidence
@@ -896,3 +1007,12 @@ Selected screenshots demonstrating the implementation and validation of the plat
 - [Data Model](docs/evidence/day08-data-model.PNG)
 - [Power BI Fraud Risk Overview](docs/evidence/day08-powerbi-fraud-risk-overview.PNG)
 - [Power BI Transaction Investigation](docs/evidence/day08-powerbi-transaction-investigation.PNG)
+
+### ML Scoring API Demonstration
+
+See [API Demonstration Evidence](docs/evidence/demo/README.md) for screenshots covering the 
+API health check, browser-based prediction interface, prediction response, parity validation, 
+CI pipeline, and interactive API documentation.
+
+The evidence supports the demonstrated functionality and validation results; it is not a 
+claim of production-scale performance or real-world fraud-detection accuracy.
