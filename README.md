@@ -986,7 +986,35 @@ a persistent production service.
 
 ---
 
-## 24. Evidence
+## 24. Docker and API Validation
+
+### Container Build
+- Docker image builds successfully using GitHub Actions.
+- Container smoke test confirms API modules import successfully.
+- Static API web interface is present in the image.
+- The image is built for validation and is not published to a registry.
+
+### Local API Validation
+- Health endpoint returns `200 OK`.
+- Model metadata endpoint returns the expected model run ID.
+- Prediction endpoint returns fraud probability, prediction, risk band, and model metadata.
+- An unauthenticated request to `/model-info` was rejected with HTTP `401`.
+
+### Model
+- Model run ID: `20261012T024013Z`
+- Model type: XGBoost
+- Decision threshold: `0.50`
+- Model artifacts remain outside the public repository.
+
+### Current Limitation
+The Docker image has passed build and import checks.
+End-to-end model inference has been validated locally, but
+inference inside the Docker container has not yet been validated.
+A secure runtime model-delivery mechanism is still required.
+
+---
+
+## 25. Evidence
 
 Selected screenshots demonstrating the implementation and validation of the platform.
 
