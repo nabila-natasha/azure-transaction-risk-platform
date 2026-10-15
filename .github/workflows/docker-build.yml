@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   docker-build:
-    name: Build API container image
+    name: Build and smoke-test API container
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -30,9 +30,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image without publishing
+      - name: Build API image
         uses: docker/build-push-action@v7
         with:
           context: .
           push: false
+          load: true
           tags: transaction-risk-api:validation
+
+      - name: Verify API modules and web interface
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            transaction-risk-api:validation \
+            -c "import api.main; import src.model_store; import src.scoring; import src.features; from pathlib import Path; assert Path('/app/api/static/index.html').is_file(); print('PASS: API modules import successfully'); print('PASS: Web interface exists in image')"
