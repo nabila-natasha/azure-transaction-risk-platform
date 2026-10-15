@@ -1,0 +1,33 @@
+
+# Python virtual environments
+.venv/
+.venv-*/
+venv/
+
+# Git and Python cache
+.git/
+**/__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Saved model backups and generated artifacts
+model-backup-*/
+artifacts/
+*.parquet
+*.pkl
+*.joblib
+
+# Potentially large data directories
+data/
+datasets/
+bronze/
+silver/
+gold/
+
+# Test files are not needed in the runtime image
+tests/
