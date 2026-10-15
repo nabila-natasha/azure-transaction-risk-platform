@@ -10,9 +10,19 @@ The purpose is to explain not only what was tested, but why the test matters
 when moving a machine learning model from an offline data-processing workflow
 into an API service.
 
-The validation compares predictions already stored in the Gold dataset with
-predictions returned by the locally running FastAPI service when the same
-transactions are submitted to it.
+The validation compares predictions already stored in the Gold dataset with 
+predictions returned by the FastAPI service when the same transactions are 
+submitted to it.
+
+For the recorded 1,000-transaction replay, the API ran inside Azure Cloud Shell 
+and was accessed from the replay script through its local service address. 
+The API used a saved model artifact in local model mode. 
+Here, *local model mode* describes where the API reads its model artifact; 
+it does not mean that the API process ran on the user's Windows desktop.
+
+The API was subsequently verified in both Azure Cloud Shell and local VS Code.
+The Cloud Shell documentation-page troubleshooting and local development instructions 
+are recorded separately in `docs/engineering/api-local-and-cloud-shell-runbook.md`.
 
 The test is designed to detect deployment and inference inconsistencies,
 including:
@@ -133,20 +143,25 @@ ground-truth outcomes.
 
 ## 4. Validation Environment
 
-The parity test was executed against a locally running API in Azure Cloud
-Shell, using the saved model artifact downloaded and verified outside the
-Azure data-processing workflow.
+The recorded prediction parity replay was executed against a FastAPI service
+running in Azure Cloud Shell. The API process loaded the saved model artifact 
+using local model mode, and the replay script accessed the API through 
+`http://localhost:8000` from within the same Cloud Shell environment.
 
-The API was configured in local model mode, so the inference request did not
-need to load the model from ADLS for every prediction.
+The API was also started and tested separately in local VS Code on Windows.
+That local demonstration verified that the application could start, load the 
+saved model, expose its endpoints, and return a prediction. It was a separate
+API smoke test, not the environment used to produce the recorded parity summary.
 
 The API exposed the following relevant endpoints:
 
-- `GET /health`: checks whether the API is healthy.
+- `GET /health`: checks basic service availability.
 - `GET /model-info`: reports model metadata and requires `X-API-Key`.
 - `POST /predict`: returns a prediction and requires `X-API-Key`.
+- `GET /docs`: provides interactive Swagger UI documentation.
+- `GET /openapi.json`: provides the OpenAPI specification.
 
-The test used the following expected model settings:
+The recorded parity test used these expected settings:
 
 | Setting | Value |
 |---|---|
@@ -158,11 +173,18 @@ The test used the following expected model settings:
 | Silver source | `silver/transactions/streaming` |
 | Gold reference | `gold/ml/scored_transactions/scored_transactions.parquet` |
 
-The API key was supplied through an environment variable rather than being
-included as a literal secret in the replay script.
+The API key was supplied through an environment variable rather than embedded
+as a literal secret in the replay script. The expected run ID was configured 
+separately so that the replay could fail if the API loaded an unexpected model run.
 
-The expected run ID is configured separately so that the test can fail if
-the API unexpectedly loads a different model run.
+The Cloud Shell startup process, local Windows startup instructions, and the 
+Web Preview `/docs` troubleshooting fix are documented in 
+`docs/engineering/api-local-and-cloud-shell-runbook.md`.
+
+**Environment distinction:** `localhost` refers to the environment running the 
+client. In the recorded replay, that was Cloud Shell. In the local Windows 
+demonstration, `127.0.0.1` referred to the user's local computer. 
+These addresses are not interchangeable across machines.
 
 ## 5. Model Feature Contract
 
@@ -452,65 +474,89 @@ have prevented losses.
 
 ### Prerequisites
 
-- The repository and its Python environment are available.
-- The required project dependencies are installed.
-- Azure access is configured for reading the Silver and Gold Parquet files.
-- The local model artifact is available and matches the expected run.
-- The API is running on `http://localhost:8000`.
-- The API key used by the replay script matches the running API's key.
+- The repository and its required Python dependencies are available.
+- The saved model artifact matches the expected run.
+- Azure access is configured to read the Silver and Gold Parquet files.
+- The API key is configured in the environment running the API.
+- The replay script can access the API and the required source datasets.
 
-Start the API in the first terminal using the project's documented local
-model configuration. For the validation environment used in this run, the
-configuration was:
+### Step 1: Prepare the Cloud Shell environment
 
-    cd ~/azure-transaction-risk-platform
-    source /tmp/transaction-risk-api-venv/bin/activate
-    export MODEL_SOURCE=local
-    export MODEL_DIR="$HOME/model-backup-20261012T024013Z"
-    export MODEL_RUN_ID=20261012T024013Z
-    export API_KEY=day3-local-test-key
-    python -m uvicorn --factory api.main:create_app --host 0.0.0.0 --port 8000
+Follow `docs/engineering/api-local-and-cloud-shell-runbook.md`, 
+Section 4, to verify the repository, restore the model artifacts if 
+necessary, set the environment variables, and start Uvicorn.
 
-Keep this terminal running while the replay executes in a second terminal.
+Before continuing, verify that `/health`, `/docs`, and `/openapi.json` 
+return successful responses.
 
-In the second terminal, activate the project environment and configure the
-expected run ID and API key:
+### Step 2: Run the parity replay
 
-    cd ~/azure-transaction-risk-platform
-    source .venv/bin/activate
-    export API_KEY=day3-local-test-key
-    export EXPECTED_MODEL_RUN_ID=20261012T024013Z
+Keep the API server running in the first terminal. Open a second 
+Cloud Shell terminal, enter the repository, activate the Python 
+environment that contains the project dependencies, and configure 
+the replay settings:
 
-Run a smaller smoke test:
+```bash
+cd ~/azure-transaction-risk-platform
 
-    python scripts/replay_parity.py --sample-size 100
+export API_KEY="replace-with-the-same-test-key-used-by-the-API"
+export EXPECTED_MODEL_RUN_ID="20261012T024013Z"
+```
 
-Then run the larger sample:
+Run a smaller smoke test first:
 
-    python scripts/replay_parity.py --sample-size 1000
+```bash
+python scripts/replay_parity.py --sample-size 100
+```
 
-The script writes its evidence to:
+If that succeeds, run the recorded-size validation:
 
-    docs/evidence/parity/details.csv
-    docs/evidence/parity/mismatches.csv
-    docs/evidence/parity/summary.json
+```bash
+python scripts/replay_parity.py --sample-size 1000
+```
 
-**Important:** The script overwrites these evidence files when it runs again.
-Commit or copy evidence that you need to preserve before executing a new
-replay.
+The API key must match the key configured for the running API. 
+Use the Python environment that has the project's replay dependencies
+installed; the server and replay terminals do not need to use the same 
+virtual environment, but both environments must have their respective dependencies.
 
-After the replay, run the automated tests:
+### Step 3: Inspect the evidence
 
-    python -m pytest tests -q
+The replay writes its evidence to:
 
-Then inspect the changes:
+```text
+docs/evidence/parity/details.csv
+docs/evidence/parity/mismatches.csv
+docs/evidence/parity/summary.json
+```
 
-    git diff --check
-    git status --short
+Check the summary's overall pass/fail result, request-error count, 
+comparison counts, and mismatch count. An empty mismatch file should 
+be interpreted alongside the summary, not in isolation.
 
-The commands above reflect the Cloud Shell environment used for this
-validation. A different machine or environment may require different
-activation paths and credentials.
+**Important:** A new replay can overwrite the existing evidence files. 
+Preserve any evidence that must remain unchanged before running another replay.
+
+### Step 4: Run automated tests and inspect repository changes
+
+```bash
+python -m pytest tests -q
+git diff --check
+git status --short
+```
+
+The recorded test run reported 43 passing tests and one Starlette deprecation warning.
+New runs may produce different results if the code or dependencies change.
+
+The commands above describe the recorded Cloud Shell workflow. A local Windows run
+requires the appropriate Windows Python executable and local environment configuration. 
+Consult `docs/engineering/api-local-and-cloud-shell-runbook.md` for those differences.
+
+### Reproducibility note
+
+Reproducing the replay requires access to the same underlying Silver and Gold data, a 
+compatible model artifact, the expected configuration, and the relevant dependencies. 
+Starting the API successfully does not by itself reproduce the parity result.
 
 ## 12. Evidence Files and Interpretation
 
