@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 import pandas as pd
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -87,7 +88,20 @@ def create_app(settings=None, bundle=None):
         )
         yield
 
-    app = FastAPI(title="Transaction Risk Scoring API", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(
+        title="Transaction Risk Scoring API",
+        version="1.0.0",
+        lifespan=lifespan,
+        docs_url=None,
+    )
+
+    @app.get("/docs", include_in_schema=False)
+    def custom_docs():
+        return get_swagger_ui_html(
+            openapi_url="openapi.json",
+            title="Transaction Risk Scoring API - Swagger UI",
+        )
+
 
     @app.middleware("http")
     async def request_logging(request: Request, call_next):
