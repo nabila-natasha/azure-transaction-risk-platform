@@ -988,46 +988,48 @@ a persistent production service.
 
 ---
 
+
 ## 24. Docker and API Validation
 
-### Container Build
-- Docker image builds successfully using GitHub Actions.
-- Container smoke test confirms API modules import successfully.
-- Static API web interface is present in the image.
-- The image is built for validation and is not published to a registry.
+### Container Build and Model Delivery
 
-### Local API Validation
-- Health endpoint returns `200 OK`.
-- Model metadata endpoint returns the expected model run ID.
-- Prediction endpoint returns fraud probability, prediction, risk band, and model metadata.
-- An unauthenticated request to `/model-info` was rejected with HTTP `401`.
+- GitHub Actions builds the Docker image for validation; the image is not published to a container registry.
+- The trained XGBoost model is stored in a separate private repository rather than the public application repository.
+- GitHub Actions retrieves the model artifacts using a repository-scoped read token stored as a secret.
+- The workflow verifies SHA-256 checksums and validates the pinned model run ID and feature contract.
+- The model artifacts are mounted read-only at `/models` during container validation rather than baked into the application image.
 
-### Model
+### Automated API Validation
+
+The successful Docker workflow validates the API using the actual saved model, not a synthetic substitute.
+
+- API health check
+- Authentication rejection for protected endpoints
+- Invalid request validation
+- Model metadata and run ID verification
+- Successful transaction prediction using the saved XGBoost model
+- Container cleanup after testing
+
+### Model Baseline
+
 - Model run ID: `20261012T024013Z`
 - Model type: XGBoost
 - Decision threshold: `0.50`
-- Model artifacts remain outside the public repository.
+- Expected feature count: 11
+- Artifact storage: private model repository
+- Runtime artifact path: `/models`
 
-### Current Limitation
-The Docker image has passed build and import checks.
-End-to-end model inference has been validated locally, but
-inference inside the Docker container has not yet been validated.
-A secure runtime model-delivery mechanism is still required.
+### Local API Validation
 
+The API has also been demonstrated locally using the saved model through the browser-based API interface at `/docs`. The local demonstration validates the practical inference flow without requiring Docker to be installed on the company laptop.
 
-### Docker Runtime Validation
-- GitHub Actions successfully builds the Docker image.
-- Container smoke tests confirm API imports and web-interface availability.
-- A temporary synthetic model was mounted into the container.
-- Container startup and model loading succeeded with the test model.
-- Health, authentication, model metadata, and prediction endpoint checks passed.
-- The container returned a valid prediction response.
-- The trained XGBoost model remains outside the public repository.
+### Current Limitations
 
-### Remaining Work
-- Validate inference inside Docker using the actual saved XGBoost model.
-- Implement secure runtime delivery of the trained model.
-- Decide on a hosting platform before claiming production deployment.
+- The API has been validated locally and through automated container testing; it is not claimed to be publicly deployed or continuously available.
+- Model version promotion is documented as a repeatable procedure; a second model version has not yet been promoted and validated.
+- Production hosting, production secrets management, operational monitoring, and production-scale performance validation remain outside the current implementation.
+
+See [Model Lifecycle, Artifact Integrity, and Versioning](docs/engineering/model-lifecycle-and-versioning.md) for the model delivery, integrity, and versioning design.
 
 ---
 
@@ -1060,7 +1062,7 @@ The API reports model metadata, including its version and run ID, so a predictio
 
 The successful GitHub Actions Docker workflow demonstrates that the workflow can retrieve the real model artifacts, verify their checksums and expected model contract, build the API image, and execute inference inside the container.
 
-**Successful workflow run:** [View Docker build and real-model inference validation](https://github.com/nabila-natasha/azure-transaction-risk-platform/actions/workflows/docker-build.yml/badge.svg)
+**Successful workflow run:** [View Docker build and real-model inference validation](https://github.com/nabila-natasha/azure-transaction-risk-platform/actions/runs/38841433984)
 
 This is automated container validation, not a claim that the API is publicly deployed or continuously running.
 
