@@ -1094,9 +1094,15 @@ Selected screenshots demonstrating the implementation and validation of the plat
 
 ### ML Scoring API Demonstration
 
-See [API Demonstration Evidence](docs/evidence/demo/README.md) for screenshots covering the 
-API health check, browser-based prediction interface, prediction response, parity validation, 
-CI pipeline, and interactive API documentation.
+See [API Demonstration Evidence](docs/evidence/demo/README.md) for screenshots covering:
 
-The evidence supports the demonstrated functionality and validation results; it is not a 
-claim of production-scale performance or real-world fraud-detection accuracy.
+- Local API startup and interactive FastAPI documentation
+- Local model metadata and prediction response
+- API health and browser-based prediction interface
+- Prediction parity validation
+- Azure Cloud Shell Web Preview
+- Azure DevOps pipeline execution
+
+The successful Docker GitHub Actions workflow provides additional automated evidence of checksum verification, model contract validation, and inference using the actual saved model inside a container.
+
+The evidence supports the demonstrated functionality and recorded validation results. It is not a claim of production-scale performance, persistent public deployment, or real-world fraud-detection accuracy.
