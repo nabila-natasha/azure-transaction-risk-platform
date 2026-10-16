@@ -55,6 +55,7 @@ jobs:
           token: ${{ secrets.MODEL_REPO_READ_TOKEN }}
           path: private-model
           persist-credentials: false
+          ref: model-20261012T024013Z
 
       - name: Verify model artifact checksums
         shell: bash
