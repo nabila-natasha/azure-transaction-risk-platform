@@ -1,5 +1,5 @@
 
-name: Docker API Image Build Validation
+name: Docker API Build and Real Model Validation
 
 on:
   workflow_dispatch:
@@ -19,13 +19,64 @@ permissions:
 
 jobs:
   docker-test:
-    name: Build and test container inference
+    name: Build and test with pinned XGBoost model
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
+    env:
+      IMAGE_NAME: transaction-risk-api:validation
+      CONTAINER_NAME: transaction-risk-api-test
+      MODEL_RUN_ID: "20261012T024013Z"
+      TEST_API_KEY: "container-test-key"
+
     steps:
-      - name: Check out repository
+      - name: Check out public project repository
         uses: actions/checkout@v4
+
+      - name: Check out private model artifacts
+        uses: actions/checkout@v4
+        with:
+          repository: nabila-natasha/azure-transaction-risk-model-artifacts
+          token: ${{ secrets.MODEL_REPO_READ_TOKEN }}
+          path: private-model
+          persist-credentials: false
+
+      - name: Verify model artifact checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd private-model
+          sha256sum --check SHA256SUMS
+          echo "PASS: all model artifact checksums match"
+
+      - name: Validate pinned model run ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(
+              Path("private-model/manifest.json").read_text(encoding="utf-8")
+          )
+          expected = "20261012T024013Z"
+
+          assert manifest.get("run_id") == expected, (
+              f"Expected run ID {expected}, got {manifest.get('run_id')}"
+          )
+          assert isinstance(manifest.get("features"), list), (
+              "Manifest features must be a list"
+          )
+          assert len(manifest["features"]) == 11, (
+              f"Expected 11 features, got {len(manifest['features'])}"
+          )
+          assert Path("private-model/model.json").is_file(), (
+              "model.json is missing"
+          )
+
+          print("PASS: pinned run ID and 11-feature contract verified")
+          PY
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -38,66 +89,140 @@ jobs:
           load: true
           tags: transaction-risk-api:validation
 
-      - name: Create temporary test model
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/model"
-
-          docker run --rm \
-            -v "$RUNNER_TEMP/model:/models" \
-            --entrypoint python \
-            transaction-risk-api:validation \
-            -c 'import json, pandas as pd; from xgboost import XGBClassifier; from src.features import FEATURES; X = pd.DataFrame([[0.1 * (i+j+1) for j in range(len(FEATURES))] for i in range(8)], columns=FEATURES); y = [0,1,0,1,0,1,0,1]; m = XGBClassifier(n_estimators=3, max_depth=2, n_jobs=1, random_state=42); m.fit(X,y); m.save_model("/models/model.json"); json.dump({"run_id":"20261012T024013Z","features":FEATURES}, open("/models/manifest.json","w"))'
-
-      - name: Start API container with temporary model
-        run: |
-          docker run -d \
-            --name transaction-risk-api-test \
-            -p 127.0.0.1:8000:8000 \
-            -e API_KEY=container-test-key \
-            -e MODEL_SOURCE=local \
-            -e MODEL_DIR=/models \
-            -e MODEL_RUN_ID=20261012T024013Z \
-            -v "$RUNNER_TEMP/model:/models:ro" \
-            transaction-risk-api:validation
-
-      - name: Test health, authentication, metadata and prediction
+      - name: Start API with the actual saved model
         shell: bash
         run: |
           set -euo pipefail
 
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            -p 127.0.0.1:8000:8000 \
+            -e API_KEY="$TEST_API_KEY" \
+            -e MODEL_SOURCE=local \
+            -e MODEL_DIR=/models \
+            -e MODEL_RUN_ID="$MODEL_RUN_ID" \
+            -v "$GITHUB_WORKSPACE/private-model:/models:ro" \
+            "$IMAGE_NAME"
+
+      - name: Test health, authentication, metadata and real prediction
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Wait for the API to finish loading the real model.
+          ready=false
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:8000/health; then
-              echo
+            if curl --silent --show-error --fail \
+              http://127.0.0.1:8000/health \
+              --output /tmp/health.json; then
+              ready=true
               break
             fi
             sleep 2
           done
 
-          status=$(curl -s -o /dev/null -w "%{http_code}" \
+          if [ "$ready" != "true" ]; then
+            echo "ERROR: API did not become healthy"
+            docker logs "$CONTAINER_NAME" || true
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(Path("/tmp/health.json").read_text())
+          assert health.get("status") == "ok", health
+          print("PASS: health endpoint")
+          PY
+
+          # Verify that protected endpoints reject missing credentials.
+          status=$(curl --silent --show-error \
+            --output /tmp/unauthorized.json \
+            --write-out "%{http_code}" \
             http://127.0.0.1:8000/model-info)
 
           test "$status" = "401"
-          echo "PASS: unauthenticated request rejected"
+          echo "PASS: unauthenticated model-info request rejected (401)"
 
-          curl -fsS \
-            -H "X-API-Key: container-test-key" \
-            http://127.0.0.1:8000/model-info
+          # Verify metadata for the exact model run.
+          curl --silent --show-error --fail \
+            -H "X-API-Key: $TEST_API_KEY" \
+            http://127.0.0.1:8000/model-info \
+            --output /tmp/model-info.json
 
-          response=$(curl -fsS \
-            -X POST http://127.0.0.1:8000/predict \
-            -H "X-API-Key: container-test-key" \
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          info = json.loads(Path("/tmp/model-info.json").read_text())
+          assert info.get("model_run_id") == "20261012T024013Z", info
+          assert isinstance(info.get("features"), list), info
+          assert len(info["features"]) == 11, info
+          assert isinstance(info.get("threshold"), (int, float)), info
+          assert 0 <= info["threshold"] <= 1, info
+
+          print("PASS: model metadata and pinned run ID")
+          print("Model version:", info.get("model_version"))
+          print("Feature count:", len(info["features"]))
+          print("Threshold:", info["threshold"])
+          PY
+
+          # Submit a valid transaction to the actual saved model.
+          curl --silent --show-error --fail \
+            --request POST \
+            http://127.0.0.1:8000/predict \
+            -H "X-API-Key: $TEST_API_KEY" \
             -H "Content-Type: application/json" \
-            -d '{"event_time":"2026-10-15T09:00:00","dob":"1994-02-26T00:00:00","amt":5000.0,"city_pop":20000,"lat":48.8878,"long":-100.9893,"merch_lat":40.351813,"merch_long":-122.230347}')
+            --data '{
+              "event_time": "2026-10-15T09:00:00",
+              "dob": "1994-02-26T00:00:00",
+              "amt": 5000.0,
+              "city_pop": 20000,
+              "lat": 48.8878,
+              "long": -100.9893,
+              "merch_lat": 40.351813,
+              "merch_long": -122.230347
+            }' \
+            --output /tmp/prediction.json
 
-          echo "$response"
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-          RESPONSE="$response" python -c 'import json, os; r=json.loads(os.environ["RESPONSE"]); required={"fraud_probability","predicted_fraud","risk_band","model_version","model_run_id"}; assert required.issubset(r), f"Missing fields: {required-set(r)}"; assert 0 <= r["fraud_probability"] <= 1; assert r["predicted_fraud"] in (0,1); print("PASS: container returned a valid prediction response")'
+          result = json.loads(Path("/tmp/prediction.json").read_text())
+          required = {
+              "request_id",
+              "fraud_probability",
+              "predicted_fraud",
+              "risk_band",
+              "model_version",
+              "model_run_id",
+              "threshold",
+          }
 
-      - name: Show container logs if the test fails
+          missing = required - result.keys()
+          assert not missing, f"Missing prediction fields: {sorted(missing)}"
+          assert 0 <= result["fraud_probability"] <= 1, result
+          assert result["predicted_fraud"] in (0, 1), result
+          assert result["model_run_id"] == "20261012T024013Z", result
+          assert result["risk_band"] in {"Low", "Medium", "High"}, result
+
+          print("PASS: real-model prediction response")
+          print("Fraud probability:", result["fraud_probability"])
+          print("Predicted fraud:", result["predicted_fraud"])
+          print("Risk band:", result["risk_band"])
+          print("Model run ID:", result["model_run_id"])
+          PY
+
+      - name: Show container logs if a test fails
         if: failure()
-        run: docker logs transaction-risk-api-test || true
+        shell: bash
+        run: |
+          docker logs "$CONTAINER_NAME" || true
 
-      - name: Clean up test container
+      - name: Remove test container
         if: always()
-        run: docker rm -f transaction-risk-api-test || true
+        shell: bash
+        run: |
+          docker rm --force "$CONTAINER_NAME" || true
