@@ -69,8 +69,9 @@ These checks serve different purposes:
 
 - **Private access** controls who can retrieve the artifacts.
 - **Checksums** detect whether files differ from the expected versions.
-- **Manifest validation** checks that the selected artifacts identify the
-  intended model version and input contract.
+- **Manifest validation** verifies the declared model version and feature contract.
+- **Model validation** checks the saved model's actual feature names and order,
+  where those names are stored in the model artifact.
 - **Inference tests** verify that the loaded model can actually score a
   transaction through the API.
 
@@ -112,7 +113,11 @@ The workflow includes:
 - A successful prediction using the saved model
 - Container cleanup
 
-Successful workflow run: **[Insert the URL of the successful GitHub Actions run]**
+The workflow validates the currently selected baseline model. Model-update
+and rollback steps are documented as a release procedure; a second model
+version has not yet been released and validated.
+
+Successful workflow run: **[https://github.com/nabila-natasha/azure-transaction-risk-platform/actions/runs/38841433984]**
 
 This evidence demonstrates a tested containerized inference path. It does
 not mean the API is publicly deployed or running continuously.
@@ -138,6 +143,22 @@ replacement of the working baseline.
 The workflow's repository reference and expected run ID must agree. Merely
 changing the run ID without retrieving the matching artifacts is not a
 valid model update.
+
+For reproducible artifact retrieval, the workflow should reference an 
+immutable commit SHA or a controlled version tag in the private model 
+repository. The expected model run ID, manifest, and artifact checksums 
+must all correspond to that revision.
+
+### Current Implementation Status
+
+The baseline model `20261012T024013Z` has been validated through the
+current GitHub Actions Docker workflow. The repeatable model-update and
+rollback steps above describe the intended release procedure; a second
+model version has not yet been released or validated.
+
+The current baseline remains the reference version. Any future candidate
+must have matching model artifacts, manifest metadata, checksums, and
+workflow configuration before it can be promoted.
 
 ## 8. Rollback
 
