@@ -798,6 +798,10 @@ A simplified repository structure is:
 ```text
 azure-transaction-risk-platform/
 │
+├── .github/
+│   ├── workflows/
+│   │   ├── docker-build.yml
+|
 ├── api/
 │   ├── main.py
 │   └── static/
@@ -817,8 +821,6 @@ azure-transaction-risk-platform/
 ├── docs/
 │   ├── engineering/
 │   │   ├── model-versioning-and-scoring.md
-│   │   ├── api-prediction-parity-validation.md
-│   │   └── api-local-and-cloud-shell-runbook.md
 │   └── evidence/
 │   |   └── demo/
 │   └── ...
@@ -1029,7 +1031,44 @@ A secure runtime model-delivery mechanism is still required.
 
 ---
 
-## 25. Evidence
+## 25. Model Lifecycle, Artifact Integrity, and Inference
+
+### End-to-End Lifecycle
+
+The fraud-scoring API uses a saved XGBoost model. Model training and API inference are separate activities: the model is trained and evaluated offline, while the API loads an existing model for predictions. Starting the API does not retrain the model.
+
+1. **Train and evaluate:** Train the model using the project's transaction data and engineered features. Evaluate the candidate before releasing it.
+2. **Version:** Associate the saved model with a unique model run ID. The current baseline is `20261012T024013Z`.
+3. **Store privately:** Keep `model.json`, `manifest.json`, `metrics.json`, and `SHA256SUMS` in the private `azure-transaction-risk-model-artifacts` repository. Model artifacts are kept separate from the public project source code.
+4. **Verify integrity:** The Docker GitHub Actions workflow retrieves the private artifacts using a repository-scoped read token and verifies their SHA-256 checksums before building and testing the container.
+5. **Validate the model contract:** The workflow checks the pinned run ID and expected feature contract. The model must use the expected 11 features in the correct order.
+6. **Load and score:** The container loads the saved model from the mounted `/models` directory and uses it to score transactions through the API.
+7. **Test the service:** The workflow tests API health, authentication, invalid input handling, model metadata, and a prediction using the real saved model.
+
+### Current Baseline
+
+- Model run ID: `20261012T024013Z`
+- Model format: XGBoost JSON (`model.json`)
+- Artifact location: private model repository
+- Runtime artifact location: `/models`
+- Expected feature count: 11
+- API prediction output: fraud probability, predicted class, and risk band
+
+The API reports model metadata, including its version and run ID, so a prediction can be associated with the model used to generate it.
+
+### Automated Validation Evidence
+
+The successful GitHub Actions Docker workflow demonstrates that the workflow can retrieve the real model artifacts, verify their checksums and expected model contract, build the API image, and execute inference inside the container.
+
+**Successful workflow run:** [View Docker build and real-model inference validation](https://github.com/nabila-natasha/azure-transaction-risk-platform/actions/workflows/docker-build.yml/badge.svg)
+
+This is automated container validation, not a claim that the API is publicly deployed or continuously running.
+
+See [`docs/engineering/model-lifecycle-and-versioning.md`](docs/engineering/model-lifecycle-and-versioning.md) for the detailed lifecycle and model-update procedure.
+
+---
+
+## 26. Evidence
 
 Selected screenshots demonstrating the implementation and validation of the platform.
 
